@@ -1,0 +1,11 @@
+google-api-python-client
+yt-dlp
+moviepy
+whisper
+openai-whisper
+gtts
+deep-translator
+flask
+flask-cors
+python-dotenv
+redis

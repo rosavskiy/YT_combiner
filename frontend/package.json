@@ -1,0 +1,32 @@
+{
+  "name": "yt-zavod-frontend",
+  "version": "1.0.0",
+  "description": "Frontend для YT Zavod - генератор видеоконтента",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext js,jsx"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^5.2.6",
+    "@tanstack/react-query": "^5.17.15",
+    "antd": "^5.13.1",
+    "axios": "^1.6.5",
+    "better-sqlite3": "^12.4.1",
+    "dayjs": "^1.11.10",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.21.0",
+    "recharts": "^2.10.4",
+    "socket.io-client": "^4.6.2",
+    "zustand": "^4.4.7"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.48",
+    "@types/react-dom": "^18.2.18",
+    "@vitejs/plugin-react": "^4.2.1",
+    "vite": "^5.0.11"
+  }
+}
