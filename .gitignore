@@ -8,10 +8,27 @@ yarn.lock
 .env.local
 .env.production
 
+# Common lockfiles (monorepo choice: ignore)
+# bun
+# bun.lockb
+
 # Build outputs
 dist/
 build/
 *.log
+logs
+logs/**
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.eslintcache
+*.tsbuildinfo
+
+# Coverage
+coverage/
+.nyc_output/
 
 # Downloads
 downloads/
@@ -24,13 +41,27 @@ __pycache__/
 *.so
 .Python
 venv/
+.venv/
 ENV/
+**/venv/
+**/.venv/
+.pytest_cache/
+.mypy_cache/
+.pytype/
+.ipynb_checkpoints/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+pip-wheel-metadata/
+.pyre/
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+.history/
 
 # OS
 .DS_Store
@@ -38,3 +69,6 @@ Thumbs.db
 
 # Redis
 dump.rdb
+
+# Secrets (explicit)
+python-workers/google-credentials.json
