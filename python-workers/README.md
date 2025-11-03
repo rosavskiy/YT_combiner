@@ -32,7 +32,39 @@ python app.py
 
 Worker будет доступен на http://localhost:5000
 
-## 📋 Зависимости
+## � Google Sheets креды через переменные окружения
+
+Скрипт `video_parser.py` теперь автоматически подхватывает креды Google в следующем порядке:
+
+1) Аргумент `--credentials /path/to/service-account.json`
+2) Переменная `GOOGLE_CREDENTIALS_PATH`
+3) Переменная `GOOGLE_APPLICATION_CREDENTIALS` (стандарт Google)
+4) Переменная `GOOGLE_CREDENTIALS_JSON` — можно передавать либо raw JSON, либо base64 JSON
+5) Файл `python-workers/google-credentials.json` (для совместимости со старыми инструкциями)
+
+Пример .env (расположите в корне репозитория):
+
+```
+# Путь к файлу ключа сервисного аккаунта
+GOOGLE_CREDENTIALS_PATH=D:\Projects\YT_combiner\python-workers\google-credentials.json
+
+# или стандартная переменная Google
+# GOOGLE_APPLICATION_CREDENTIALS=D:\path\to\service-account.json
+
+# или сами JSON-данные (raw или base64)
+# GOOGLE_CREDENTIALS_JSON={"type":"service_account",...}
+# GOOGLE_CREDENTIALS_JSON=eyJ0eXBlIjoic2VydmljZV9hY2NvdW50Ii4uLn0=
+```
+
+Запуск примера парсинга:
+
+```bash
+python video_parser.py dQw4w9WgXcQ --spreadsheet 1a2B3c4D5e6F7g8H9i0J_EXAMPLE
+# либо явно указать путь
+python video_parser.py dQw4w9WgXcQ --credentials google-credentials.json --spreadsheet 1a2B3c4D5e6F7g8H9i0J_EXAMPLE
+```
+
+## �📋 Зависимости
 
 - **Flask** - веб-фреймворк
 - **yt-dlp** - скачивание видео

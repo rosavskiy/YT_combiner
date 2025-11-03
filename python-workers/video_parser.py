@@ -15,6 +15,14 @@ from google.oauth2.credentials import Credentials
 from google.oauth2 import service_account
 import yt_dlp
 from typing import Any, Dict, List, Optional, cast
+import base64
+
+try:
+    # Грузим .env из корня репозитория (ищем вверх по дереву)
+    from dotenv import load_dotenv, find_dotenv
+    load_dotenv(find_dotenv())
+except Exception:
+    pass
 
 class VideoParser:
     def __init__(self, google_credentials_path=None):
@@ -25,21 +33,82 @@ class VideoParser:
             google_credentials_path: Путь к JSON файлу с credentials для Google Sheets API
         """
         self.google_credentials_path = google_credentials_path
+        self._creds_info: Optional[Dict[str, Any]] = None
         self.sheets_service = None
         # Подхватываем cookies.txt рядом со скриптом (если есть)
         self.cookies_file = os.path.join(os.path.dirname(__file__), 'cookies.txt')
         
-        if google_credentials_path and os.path.exists(google_credentials_path):
-            self._init_google_sheets()
+        # Инициализация Google Sheets по приоритетам источников:
+        # 1) Явно переданный путь --credentials
+        # 2) GOOGLE_CREDENTIALS_PATH
+        # 3) GOOGLE_APPLICATION_CREDENTIALS (стандарт Google)
+        # 4) GOOGLE_CREDENTIALS_JSON (прямой JSON или base64)
+        # 5) Локальный файл рядом: python-workers/google-credentials.json
+        self._resolve_and_init_google_creds()
+
+    def _resolve_and_init_google_creds(self):
+        """Определить учетные данные для Google и инициализировать клиент Sheets."""
+        try:
+            # Список кандидатов-файлов
+            file_candidates: List[str] = []
+            if self.google_credentials_path:
+                file_candidates.append(self.google_credentials_path)
+            env_path = os.environ.get('GOOGLE_CREDENTIALS_PATH')
+            if env_path:
+                file_candidates.append(env_path)
+            adc_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+            if adc_path:
+                file_candidates.append(adc_path)
+            # Локальный файл рядом со скриптом (совместимость со старыми инструкциями)
+            file_candidates.append(os.path.join(os.path.dirname(__file__), 'google-credentials.json'))
+
+            for p in file_candidates:
+                if p and os.path.exists(p):
+                    self.google_credentials_path = p
+                    return self._init_google_sheets()
+
+            # Если файлов нет — пробуем переменную GOOGLE_CREDENTIALS_JSON
+            raw = os.environ.get('GOOGLE_CREDENTIALS_JSON')
+            if raw:
+                info = None
+                # Попытка распарсить как JSON
+                try:
+                    info = json.loads(raw)
+                except Exception:
+                    # Если это base64 от JSON
+                    try:
+                        decoded = base64.b64decode(raw).decode('utf-8')
+                        info = json.loads(decoded)
+                    except Exception:
+                        info = None
+                if info and isinstance(info, dict):
+                    self._creds_info = info
+                    return self._init_google_sheets()
+
+            print("[INFO] Google Sheets креды не найдены: используйте --credentials или переменные окружения GOOGLE_CREDENTIALS_PATH/GOOGLE_APPLICATION_CREDENTIALS/GOOGLE_CREDENTIALS_JSON")
+        except Exception as e:
+            print(f"[WARN] Не удалось инициализировать креды Google: {e}")
     
     def _init_google_sheets(self):
-        """Инициализация Google Sheets API"""
+        """Инициализация Google Sheets API из файла или из словаря creds info."""
         try:
             SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
-            creds = service_account.Credentials.from_service_account_file(
-                self.google_credentials_path, scopes=SCOPES
-            )
-            self.sheets_service = build('sheets', 'v4', credentials=creds)
+            creds_obj = None
+            if self.google_credentials_path and os.path.exists(self.google_credentials_path):
+                creds_obj = service_account.Credentials.from_service_account_file(
+                    self.google_credentials_path, scopes=SCOPES
+                )
+            elif self._creds_info:
+                creds_obj = service_account.Credentials.from_service_account_info(
+                    self._creds_info, scopes=SCOPES
+                )
+
+            if not creds_obj:
+                print("[WARN] Креды Google не заданы")
+                self.sheets_service = None
+                return
+
+            self.sheets_service = build('sheets', 'v4', credentials=creds_obj)
             print("[OK] Google Sheets API инициализирован")
         except Exception as e:
             print(f"[ERR] Ошибка инициализации Google Sheets: {e}")
@@ -678,7 +747,7 @@ def main():
     
     parser = argparse.ArgumentParser(description='YouTube Video Parser')
     parser.add_argument('video_id', nargs='?', default=None, help='YouTube Video ID')
-    parser.add_argument('--credentials', help='Path to Google Sheets credentials JSON')
+    parser.add_argument('--credentials', help='Path to Google Service Account JSON (или задайте GOOGLE_CREDENTIALS_PATH / GOOGLE_APPLICATION_CREDENTIALS / GOOGLE_CREDENTIALS_JSON)')
     parser.add_argument('--spreadsheet', help='Google Sheets Spreadsheet ID')
     parser.add_argument('--languages', nargs='+', default=['en', 'ru', 'uk', 'de', 'fr', 'es'], help='Preferred languages for transcript')
     parser.add_argument('--translate-to', default='ru', help='Auto-translate transcript to this language if not found in preferred languages')
