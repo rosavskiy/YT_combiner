@@ -62,3 +62,21 @@ netstat -ano | findstr :3000
 - ✅ Наблюдать real-time прогресс
 
 **P.S. Ваш API ключ уже в `.env` файле! 🔑**
+
+---
+
+## 🔑 Google Sheets креды (для сохранения в таблицы)
+
+Чтобы парсер мог писать данные в Google Sheets, укажите сервисный аккаунт через переменные окружения (в `.env`):
+
+```properties
+# Рекомендуется: путь к JSON ключу (файл НЕ хранить в гите)
+GOOGLE_CREDENTIALS_PATH=D:\Projects\YT_combiner\python-workers\google-credentials.json
+
+# Альтернативы (любая из них):
+# GOOGLE_APPLICATION_CREDENTIALS=D:\path\to\service-account.json
+# GOOGLE_CREDENTIALS_JSON={"type":"service_account", ...}     # raw JSON
+# GOOGLE_CREDENTIALS_JSON=eyJ0eXBlIjoic2VydmljZV9hY2NvdW50Iiwg...  # base64 JSON
+```
+
+После сохранения .env перезапустите backend.
