@@ -1,14 +1,20 @@
 import mongoose from 'mongoose';
 
 export async function connectDB() {
-  try {
-    const conn = await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/yt_combiner');
+  const uri = process.env.MONGODB_URI;
 
+  if (!uri) {
+    console.log('ℹ️ MongoDB отключена (переменная MONGODB_URI не задана). Приложение работает без MongoDB.');
+    return;
+  }
+
+  try {
+    const conn = await mongoose.connect(uri);
     console.log(`✅ MongoDB подключена: ${conn.connection.host}`);
   } catch (error) {
     console.error('⚠️  MongoDB не подключена:', error.message);
     console.log('💡 Приложение будет работать без сохранения данных');
-    console.log('💡 Для включения БД установите MongoDB или используйте MongoDB Atlas');
+    console.log('💡 Установите MongoDB или используйте MongoDB Atlas и задайте MONGODB_URI');
     // Не останавливаем приложение, позволяем работать без БД
   }
 }

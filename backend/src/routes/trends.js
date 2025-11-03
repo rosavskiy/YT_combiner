@@ -2,6 +2,7 @@ import express from 'express';
 import YouTubeTrendsService from '../services/youtubeTrendsService.js';
 import TrendModel from '../models/TrendSQLite.js';
 import { COUNTRIES } from '../config/countries.js';
+import SettingsModel from '../models/SettingsSQLite.js';
 
 const router = express.Router();
 
@@ -32,9 +33,11 @@ router.post('/fetch-all', async (req, res) => {
       });
     }
 
-    console.log('🌍 Начало загрузки трендов из 19 стран...');
+  // Получаем список отслеживаемых стран (если не настроен — все доступные)
+  const tracked = SettingsModel.getTrackedCountries().trends;
+  console.log(`🌍 Начало загрузки трендов из ${tracked.length} стран...`);
     
-    const trendsService = new YouTubeTrendsService(apiKey);
+  const trendsService = new YouTubeTrendsService(apiKey, tracked);
     const io = req.app.get('io');
     
     // Отправляем прогресс через WebSocket
@@ -42,7 +45,7 @@ router.post('/fetch-all', async (req, res) => {
       io.emit('trends-progress', progress);
     });
 
-    console.log(`✅ Загрузка завершена! Получено ${result.totalVideos} видео`);
+  console.log(`✅ Загрузка завершена! Получено ${result.totalVideos} видео`);
     
     // Сохраняем в SQLite (всегда успешно)
     const savedTrends = TrendModel.create({
@@ -57,7 +60,7 @@ router.post('/fetch-all', async (req, res) => {
       success: true,
       data: result.trends,
       totalVideos: result.totalVideos,
-      countries: result.countries,
+  countries: result.countries,
       errors: result.errors,
       id: savedTrends.id,
       saved: true

@@ -47,6 +47,12 @@ export const generatorService = {
   
   // Получить поддерживаемые языки
   getSupportedLanguages: () => api.get('/generator/languages'),
+
+  // Прочитать строки из Google Sheets (таблица спарсенных данных)
+  getSheetRows: ({ spreadsheetId, sheet = 'Videos', page = 1, pageSize = 10 }) =>
+    api.get('/generator/sheets', {
+      params: { spreadsheetId, sheet, page, pageSize }
+    }),
 };
 
 export const configService = {
@@ -55,6 +61,10 @@ export const configService = {
   
   // Получить настройки сервера
   getSettings: () => api.get('/config/settings'),
+
+  // Настройки отслеживаемых стран
+  getTrackedCountries: () => api.get('/config/tracked-countries'),
+  saveTrackedCountries: (payload) => api.put('/config/tracked-countries', payload),
 };
 
 export const topicsService = {

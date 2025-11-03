@@ -1,0 +1,66 @@
+{
+  "info": {
+    "video_id": "zT7fefjMgCY",
+    "title": "Meshtastic — связь без интернета",
+    "description": "Мештастик — офлайн mesh-сеть на LoRa (не путать с LoRaWAN): автономная связь без интернета и операторов. \nВ видео — простой обзор: что такое Meshtastic, как он устроен, какие бывают ноды и сенсоры, в каких диапазонах работает (433/868/915 МГц) и как используется на практике. \nТакже расскажем немного о нашем проекте MeshWorks.\n\nСсылки: \nВики (на русском): https://wiki.meshworks.ru \nСайт: https://meshworks.ru\nTelegram: https://t.me/meshwrks\nБусти: https://boosty.to/meshworks\n\nТаймкоды:\n00:00 - Введение\n00:50 - Что такое Meshtastic\n02:10 - Как работает нода\n02:57 - Дистанция передачи\n03:29 - Практические применения\n06:07 - Виды сенсоров\n06:53 - Принцип работы mesh-сети\n08:05 - Как присоединиться к сети\n08:51 - Заключение\n\nНапишите в комментариях, какие темы разобрать дальше (сборка узлов, антенны 868 МГц, покрытие, интеграции). Мы с радостью поучаствуем в обсуждениях и ответим на ваши вопросы и предложения.",
+    "duration": 582,
+    "channel": "MeshWorks",
+    "channel_id": "UCKmeYZWGykFJbjzs9XQuQ3Q",
+    "upload_date": "20251024",
+    "view_count": 144412,
+    "like_count": 9745,
+    "categories": [
+      "Science & Technology"
+    ],
+    "tags": []
+  },
+  "chapters": [
+    {
+      "start_time": 0.0,
+      "end_time": 50.0,
+      "title": "Введение"
+    },
+    {
+      "start_time": 50.0,
+      "end_time": 130.0,
+      "title": "Что такое Meshtastic"
+    },
+    {
+      "start_time": 130.0,
+      "end_time": 177.0,
+      "title": "Как работает нода"
+    },
+    {
+      "start_time": 177.0,
+      "end_time": 209.0,
+      "title": "Дистанция передачи"
+    },
+    {
+      "start_time": 209.0,
+      "end_time": 367.0,
+      "title": "Практические применения"
+    },
+    {
+      "start_time": 367.0,
+      "end_time": 413.0,
+      "title": "Виды сенсоров"
+    },
+    {
+      "start_time": 413.0,
+      "end_time": 485.0,
+      "title": "Принцип работы mesh-сети"
+    },
+    {
+      "start_time": 485.0,
+      "end_time": 531.0,
+      "title": "Как присоединиться к сети"
+    },
+    {
+      "start_time": 531.0,
+      "end_time": 582,
+      "title": "Заключение"
+    }
+  ],
+  "transcript": null,
+  "full_text": ""
+}

@@ -8,13 +8,17 @@ class VideoModel {
     const stmt = db.prepare(`
       INSERT INTO videos (
         video_id, title, description, channel, channel_id,
-        views, likes, comments, duration, category_id, region, data
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        views, likes, comments, duration, category_id, region, 
+        quality, status, job_id, data
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(video_id) DO UPDATE SET
         title = excluded.title,
         views = excluded.views,
         likes = excluded.likes,
-        comments = excluded.comments
+        comments = excluded.comments,
+        quality = excluded.quality,
+        status = excluded.status,
+        job_id = excluded.job_id
     `);
 
     stmt.run(
@@ -29,6 +33,9 @@ class VideoModel {
       videoData.duration,
       videoData.categoryId,
       videoData.region,
+      videoData.quality || 'highest',
+      videoData.status || 'pending',
+      videoData.jobId,
       JSON.stringify(videoData)
     );
 
@@ -53,11 +60,28 @@ class VideoModel {
   }
 
   /**
+   * Получить все видео
+   */
+  static findAll() {
+    const stmt = db.prepare(`
+      SELECT * FROM videos 
+      ORDER BY created_at DESC
+    `);
+
+    return stmt.all().map(row => ({
+      ...row,
+      data: row.data ? JSON.parse(row.data) : {},
+      downloaded: Boolean(row.downloaded),
+      processed: Boolean(row.processed)
+    }));
+  }
+
+  /**
    * Получить все скачанные видео
    */
   static findDownloaded() {
     const stmt = db.prepare(`
-      SELECT video_id, title, channel, download_path, downloaded_at, views
+      SELECT video_id, title, channel, download_path, downloaded_at, views, quality, status
       FROM videos
       WHERE downloaded = 1
       ORDER BY downloaded_at DESC
@@ -72,11 +96,24 @@ class VideoModel {
   static markAsDownloaded(videoId, downloadPath) {
     const stmt = db.prepare(`
       UPDATE videos
-      SET downloaded = 1, download_path = ?, downloaded_at = datetime('now')
+      SET downloaded = 1, download_path = ?, downloaded_at = datetime('now'), status = 'completed'
       WHERE video_id = ?
     `);
 
     stmt.run(downloadPath, videoId);
+  }
+
+  /**
+   * Обновить статус видео
+   */
+  static updateStatus(videoId, status, jobId = null) {
+    const stmt = db.prepare(`
+      UPDATE videos
+      SET status = ?, job_id = COALESCE(?, job_id)
+      WHERE video_id = ?
+    `);
+
+    stmt.run(status, jobId, videoId);
   }
 
   /**
@@ -87,7 +124,10 @@ class VideoModel {
       SELECT 
         COUNT(*) as total,
         SUM(CASE WHEN downloaded = 1 THEN 1 ELSE 0 END) as downloaded,
-        SUM(CASE WHEN processed = 1 THEN 1 ELSE 0 END) as processed
+        SUM(CASE WHEN processed = 1 THEN 1 ELSE 0 END) as processed,
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+        SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active,
+        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed
       FROM videos
     `);
 

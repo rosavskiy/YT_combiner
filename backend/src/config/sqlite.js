@@ -41,6 +41,9 @@ function initDatabase() {
       duration TEXT,
       category_id TEXT,
       region TEXT,
+      quality TEXT DEFAULT 'highest',
+      status TEXT DEFAULT 'pending',
+      job_id TEXT,
       data TEXT,
       downloaded BOOLEAN DEFAULT 0,
       download_path TEXT,
@@ -57,6 +60,31 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_videos_region ON videos(region);
     CREATE INDEX IF NOT EXISTS idx_videos_downloaded ON videos(downloaded);
     CREATE INDEX IF NOT EXISTS idx_trends_fetched_at ON trends(fetched_at);
+  `);
+
+  // Таблица настроек приложения (key/value)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Таблица отслеживаемых каналов
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS channels (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      channel_id TEXT UNIQUE NOT NULL,
+      title TEXT,
+      url TEXT,
+      added_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Индексы для каналов
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_channels_channel_id ON channels(channel_id);
   `);
 
   console.log('✅ SQLite база данных инициализирована');

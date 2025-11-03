@@ -8,7 +8,8 @@ import {
   ThunderboltOutlined
 } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { trendsService, videosService } from '../services';
+import { trendsService, videosService, configService } from '../services';
+import Flag from '../components/Flag';
 import { useSocketStore } from '../stores/socketStore';
 
 const { Title, Paragraph } = Typography;
@@ -19,6 +20,10 @@ const Dashboard = () => {
   const { data: countriesData } = useQuery({
     queryKey: ['countries'],
     queryFn: trendsService.getCountries,
+  });
+  const { data: trackedResp } = useQuery({
+    queryKey: ['tracked-countries'],
+    queryFn: configService.getTrackedCountries,
   });
 
   const { data: latestTrends } = useQuery({
@@ -31,7 +36,7 @@ const Dashboard = () => {
     queryFn: videosService.getDownloadedVideos,
   });
 
-  const totalCountries = countriesData?.count || 19;
+  const totalCountries = trackedResp?.trends?.length || countriesData?.count || 0;
   const totalVideos = latestTrends?.data?.totalVideos || 0;
   const downloadedCount = downloadedVideos?.count || 0;
 
@@ -110,14 +115,18 @@ const Dashboard = () => {
           <Col xs={24} lg={12}>
             <Card title="🌍 Мониторинг трендов" bordered={false}>
               <Paragraph>
-                Отслеживание популярных видео в 19 странах с высоким уровнем жизни:
+                Отслеживаемые страны:
               </Paragraph>
-              <Paragraph style={{ fontSize: 12, color: '#666' }}>
-                🇺🇸 США • 🇨🇦 Канада • 🇫🇮 Финляндия • 🇸🇪 Швеция • 🇨🇭 Швейцария • 🇳🇴 Норвегия • 
-                🇩🇪 Германия • 🇬🇧 Англия • 🇫🇷 Франция • 🇧🇪 Бельгия • 🇳🇱 Нидерланды • 🇮🇪 Ирландия • 
-                🇩🇰 Дания • 🇦🇹 Австрия • 🇦🇺 Австралия • 🇳🇿 Новая Зеландия • 🇮🇱 Израиль • 
-                🇸🇬 Сингапур • 🇮🇸 Исландия
-              </Paragraph>
+              <Space wrap>
+                {(trackedResp?.trends || countriesData?.countries?.map(c => c.code) || []).map(code => {
+                  const c = countriesData?.countries?.find(x => x.code === code);
+                  return (
+                    <span key={code} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#666' }}>
+                      <Flag code={c?.code} title={c?.name} /> {c?.name || code}
+                    </span>
+                  );
+                })}
+              </Space>
             </Card>
           </Col>
 

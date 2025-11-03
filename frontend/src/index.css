@@ -10,3 +10,25 @@ body {
 * {
   box-sizing: border-box;
 }
+
+/* Пульсация для активного прогресса */
+.progress-pulse .ant-progress-bg {
+  position: relative;
+}
+.progress-pulse .ant-progress-bg::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: rgba(24, 144, 255, 0.25);
+  filter: blur(2px);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 0.1; }
+}

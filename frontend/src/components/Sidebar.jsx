@@ -8,7 +8,8 @@ import {
   DownloadOutlined,
   VideoCameraOutlined,
   SettingOutlined,
-  YoutubeOutlined
+  YoutubeOutlined,
+  EyeOutlined
 } from '@ant-design/icons';
 
 const { Sider } = Layout;
@@ -34,9 +35,14 @@ const Sidebar = () => {
       label: 'Темы',
     },
     {
+      key: '/tracking',
+      icon: <EyeOutlined />,
+      label: 'Отслеживание',
+    },
+    {
       key: '/download',
       icon: <DownloadOutlined />,
-      label: 'Скачивание',
+      label: 'Скачать/Спарсить',
     },
     {
       key: '/generator',

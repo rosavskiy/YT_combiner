@@ -13,9 +13,12 @@ import videosRouter from './routes/videos.js';
 import generatorRouter from './routes/generator.js';
 import configRouter from './routes/config.js';
 import topicsRouter from './routes/topics.js';
+import systemRouter from './routes/system.js';
+import channelsRouter from './routes/channels.js';
 
 // Config
-import { connectDB } from './config/database.js';
+// MongoDB отключен по умолчанию (используем SQLite)
+// import { connectDB } from './config/database.js';
 import { initDatabase } from './config/sqlite.js';
 import { COUNTRIES } from './config/countries.js';
 
@@ -80,6 +83,8 @@ app.use('/api/videos', videosRouter);
 app.use('/api/generator', generatorRouter);
 app.use('/api/config', configRouter);
 app.use('/api/topics', topicsRouter);
+app.use('/api/system', systemRouter);
+app.use('/api/channels', channelsRouter);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -115,8 +120,8 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Database connection
-connectDB();
+// MongoDB не используется (для включения раскомментируйте и задайте MONGODB_URI)
+// connectDB();
 
 // Инициализация SQLite
 try {

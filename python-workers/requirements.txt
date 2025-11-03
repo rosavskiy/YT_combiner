@@ -1,11 +1,17 @@
-google-api-python-client
-yt-dlp
-moviepy
-whisper
-openai-whisper
-gtts
-deep-translator
-flask
-flask-cors
-python-dotenv
-redis
+google-api-python-client==2.108.0
+google-auth-httplib2==0.2.0
+google-auth-oauthlib==1.2.0
+yt-dlp>=2024.10.7
+youtube-transcript-api==0.6.2
+moviepy==1.0.3
+gtts==2.5.0
+deep-translator==1.11.4
+flask==3.0.0
+flask-cors==4.0.0
+python-dotenv==1.0.0
+redis==5.0.1
+requests>=2.31.0
+# optional: openai-whisper (требует ffmpeg и PyTorch, весит много)
+# openai-whisper==20231117
+# Опционально: клиент для облачного Whisper API. Будет использован, если задан OPENAI_API_KEY
+openai>=1.40.0

@@ -1,14 +1,14 @@
 import { google } from 'googleapis';
-import { COUNTRIES, getAllCountryCodes } from '../config/countries.js';
+import { getAllCountryCodes } from '../config/countries.js';
 
 class YouTubeTrendsService {
-  constructor(apiKey) {
+  constructor(apiKey, regions = null) {
     this.youtube = google.youtube({
       version: 'v3',
       auth: apiKey
     });
-    
-    this.regions = getAllCountryCodes();
+    // Если список регионов не передан — используем все доступные
+    this.regions = Array.isArray(regions) && regions.length > 0 ? regions : getAllCountryCodes();
   }
 
   /**

@@ -1,15 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Button, Table, Progress, Space, Tag, Statistic, Row, Col, message, Select, Empty } from 'antd';
-import { GlobalOutlined, ReloadOutlined, EyeOutlined, LikeOutlined, CommentOutlined, YoutubeOutlined, LinkOutlined } from '@ant-design/icons';
+import { Card, Button, Table, Progress, Space, Statistic, Row, Col, Select, Empty, App as AntdApp, Checkbox } from 'antd';
+import { GlobalOutlined, ReloadOutlined, EyeOutlined, LikeOutlined, CommentOutlined, YoutubeOutlined, DownloadOutlined, FileTextOutlined } from '@ant-design/icons';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { trendsService } from '../services';
+import { trendsService, configService } from '../services';
 import { useSocketStore } from '../stores/socketStore';
+import videosService from '../services/videosService';
+import Flag from '../components/Flag';
 
 const TrendsPage = () => {
+  const { message } = AntdApp.useApp();
   const [progress, setProgress] = useState(0);
-  const [selectedCountry, setSelectedCountry] = useState('all');
+  const [selectedCountries, setSelectedCountries] = useState([]);
   const [localTrends, setLocalTrends] = useState(null);
   const { socket } = useSocketStore();
+  const [dlQuality, setDlQuality] = useState('highest');
+  const [health, setHealth] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await videosService.getSystemHealth();
+        setHealth(res.data);
+      } catch {}
+    })();
+  }, []);
 
   // Подписка на прогресс через WebSocket
   useEffect(() => {
@@ -35,6 +49,39 @@ const TrendsPage = () => {
     queryKey: ['countries'],
     queryFn: trendsService.getCountries,
   });
+
+  // Настроенные списки отслеживаемых стран
+  const { data: trackedResp } = useQuery({
+    queryKey: ['tracked-countries'],
+    queryFn: configService.getTrackedCountries,
+  });
+
+  // Все доступные коды стран для трендов
+  const allTrendCodes = React.useMemo(() => (
+    trackedResp?.trends || countriesData?.countries?.map(c => c.code) || []
+  ), [trackedResp, countriesData]);
+
+  // Инициализация выбранных стран из localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('trends_regions_selected');
+    if (saved) {
+      try {
+        const arr = JSON.parse(saved) || [];
+        const filtered = arr.filter((c) => allTrendCodes.includes(c));
+        setSelectedCountries(filtered);
+        return;
+      } catch {}
+    }
+    // по умолчанию пусто (поведение: топ-10 по каждой стране), но выравниваем по доступным кодам
+    setSelectedCountries([]);
+  }, [allTrendCodes]);
+
+  const pluralizeCountries = (n) => {
+    const mod10 = n % 10, mod100 = n % 100;
+    if (mod10 === 1 && mod100 !== 11) return 'страна';
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'страны';
+    return 'стран';
+  };
 
   // Запрос последних трендов
   const { data: trendsData, refetch, isLoading } = useQuery({
@@ -75,20 +122,34 @@ const TrendsPage = () => {
     fetchTrendsMutation.mutate(apiKey);
   };
 
+  // Мутация для парсинга видео из трендов
+  const parseMutation = useMutation({
+    mutationFn: async (videoId) => {
+      const spreadsheetId = localStorage.getItem('sheets_spreadsheet_id') || undefined;
+      return videosService.parseVideo(videoId, { spreadsheetId });
+    },
+    onSuccess: () => {
+      message.success('✅ Видео добавлено в очередь парсинга!');
+    },
+    onError: (error) => {
+      message.error(`❌ Ошибка парсинга: ${error?.message || 'Не удалось запустить парсинг'}`);
+    }
+  });
+
   // Колонки таблицы
   const columns = [
     {
       title: 'Страна',
       dataIndex: 'region',
       key: 'region',
-      width: 100,
+      width: 160,
       fixed: 'left',
       render: (region) => {
         const country = countriesData?.countries?.find(c => c.code === region);
         return (
           <Space>
-            <span style={{ fontSize: 20 }}>{country?.flag}</span>
-            <Tag color="blue">{region}</Tag>
+            <Flag code={country?.code} title={country?.name || region} />
+            <span>{country?.name || region}</span>
           </Space>
         );
       }
@@ -161,19 +222,32 @@ const TrendsPage = () => {
     {
       title: 'Действия',
       key: 'actions',
-      width: 100,
+      width: 200,
       fixed: 'right',
       render: (_, record) => (
-        <Space>
+        <Space size="small">
           <Button
-            type="link"
+            type="primary"
             size="small"
-            icon={<LinkOutlined />}
-            href={`https://www.youtube.com/watch?v=${record.videoId}`}
-            target="_blank"
-            rel="noopener noreferrer"
+            icon={<DownloadOutlined />}
+            onClick={async () => {
+              message.info(`Добавлено в очередь скачивания: ${record.title}`);
+              try {
+                await videosService.downloadVideo(record.videoId, dlQuality);
+              } catch (e) {
+                message.error(e?.message || 'Не удалось добавить в очередь');
+              }
+            }}
           >
-            Открыть
+            Скачать на сервер
+          </Button>
+          <Button
+            size="small"
+            icon={<FileTextOutlined />}
+            onClick={() => parseMutation.mutate(record.videoId)}
+            loading={parseMutation.isPending}
+          >
+            Парсить
           </Button>
         </Space>
       ),
@@ -188,14 +262,17 @@ const TrendsPage = () => {
     if (!sourceData) return [];
     
     const allVideos = [];
-    
+    const allowed = new Set(trackedResp?.trends || Object.keys(sourceData));
+    const filterRegions = selectedCountries && selectedCountries.length > 0
+      ? new Set(selectedCountries)
+      : allowed;
+
     Object.entries(sourceData).forEach(([region, videos]) => {
       if (Array.isArray(videos)) {
-        const filteredVideos = selectedCountry === 'all' 
-          ? videos.slice(0, 10)
-          : region === selectedCountry 
-            ? videos 
-            : [];
+        if (!filterRegions.has(region)) return;
+        const filteredVideos = (selectedCountries && selectedCountries.length > 0)
+          ? videos
+          : videos.slice(0, 10);
         
         filteredVideos.forEach(video => {
           allVideos.push({ 
@@ -208,7 +285,7 @@ const TrendsPage = () => {
     });
     
     return allVideos;
-  }, [localTrends, trendsData, selectedCountry]);
+  }, [localTrends, trendsData, selectedCountries, trackedResp]);
 
   return (
     <div>
@@ -218,22 +295,65 @@ const TrendsPage = () => {
             <Space style={{ width: '100%', justifyContent: 'space-between', flexWrap: 'wrap' }}>
               <Space>
                 <GlobalOutlined style={{ fontSize: 24, color: '#1890ff' }} />
-                <h2 style={{ margin: 0 }}>YouTube Тренды (19 стран)</h2>
+                <h2 style={{ margin: 0 }}>YouTube Тренды ({(trackedResp?.trends?.length) ?? countriesData?.count ?? 0} стран)</h2>
               </Space>
               <Space>
-                <Select
-                  style={{ width: 200 }}
-                  value={selectedCountry}
-                  onChange={setSelectedCountry}
-                  placeholder="Выберите страну"
-                >
-                  <Select.Option value="all">Все страны (топ 10)</Select.Option>
-                  {countriesData?.countries?.map(country => (
-                    <Select.Option key={country.code} value={country.code}>
-                      {country.flag} {country.name}
-                    </Select.Option>
-                  ))}
+                <Select style={{ width: 130 }} value={dlQuality} onChange={setDlQuality}>
+                  <Select.Option value="highest">Макс</Select.Option>
+                  <Select.Option value="1080">1080p</Select.Option>
+                  <Select.Option value="720">720p</Select.Option>
+                  <Select.Option value="480">480p</Select.Option>
+                  <Select.Option value="360">360p</Select.Option>
                 </Select>
+                <Select
+                  mode="multiple"
+                  style={{ width: 360 }}
+                  value={selectedCountries}
+                  onChange={(vals) => {
+                    if (vals.includes('__ALL__')) {
+                      const isAll = selectedCountries.length === allTrendCodes.length;
+                      const next = isAll ? [] : allTrendCodes;
+                      setSelectedCountries(next);
+                      localStorage.setItem('trends_regions_selected', JSON.stringify(next));
+                    } else {
+                      setSelectedCountries(vals);
+                      localStorage.setItem('trends_regions_selected', JSON.stringify(vals));
+                    }
+                  }}
+                  placeholder={selectedCountries.length ? `Выбрано ${selectedCountries.length} ${pluralizeCountries(selectedCountries.length)}` : 'Выберите регионы'}
+                  optionLabelProp="label"
+                  maxTagCount={0}
+                  maxTagPlaceholder={() => `Выбрано ${selectedCountries.length} ${pluralizeCountries(selectedCountries.length)}`}
+                  options={[
+                    {
+                      value: '__ALL__',
+                      label: (
+                        <Space>
+                          <Checkbox checked={selectedCountries.length === allTrendCodes.length} />
+                          <span>Выбрать все</span>
+                        </Space>
+                      )
+                    },
+                    ...allTrendCodes.map(code => {
+                      const c = countriesData?.countries?.find(x => x.code === code);
+                      return {
+                        value: code,
+                        label: (
+                          <Space>
+                            <Flag code={c?.code} title={c?.name} />
+                            <span>{c?.name || code}</span>
+                          </Space>
+                        )
+                      };
+                    })
+                  ]}
+                  menuItemSelectedIcon={({ isSelected, value }) => (
+                    <Checkbox
+                      checked={value === '__ALL__' ? selectedCountries.length === allTrendCodes.length : isSelected}
+                      style={{ marginRight: 8 }}
+                    />
+                  )}
+                />
                 <Button 
                   type="primary" 
                   icon={<ReloadOutlined />}
@@ -245,6 +365,7 @@ const TrendsPage = () => {
                 </Button>
               </Space>
             </Space>
+            {/* Убрали предупреждение о FFmpeg из интерфейса */}
             
             {progress > 0 && progress < 100 && (
               <Progress 
@@ -264,7 +385,7 @@ const TrendsPage = () => {
           <Card>
             <Statistic 
               title="Всего стран" 
-              value={countriesData?.count || 19}
+              value={trackedResp?.trends?.length || countriesData?.count || 0}
               prefix={<GlobalOutlined />}
             />
           </Card>

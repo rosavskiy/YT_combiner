@@ -1,5 +1,9 @@
 import express from 'express';
 import axios from 'axios';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { google } from 'googleapis';
 
 const router = express.Router();
 
@@ -94,3 +98,96 @@ router.get('/languages', (req, res) => {
 });
 
 export default router;
+
+// ===== Sheets helpers and endpoint =====
+
+async function getSheetsClient() {
+  // 1) Прямые креды из переменной окружения
+  if (process.env.GOOGLE_CREDENTIALS_JSON) {
+    try {
+      const raw = process.env.GOOGLE_CREDENTIALS_JSON;
+      const creds = JSON.parse(raw);
+      const scopes = ['https://www.googleapis.com/auth/spreadsheets.readonly'];
+      const auth = new google.auth.JWT(
+        creds.client_email,
+        null,
+        creds.private_key,
+        scopes
+      );
+      await auth.authorize();
+      return google.sheets({ version: 'v4', auth });
+    } catch (e) {
+      console.warn('GOOGLE_CREDENTIALS_JSON задан, но не получилось распарсить:', e?.message);
+    }
+  }
+
+  // 2) Поиск файла с кредами по нескольким путям
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  const repoRoot = path.resolve(__dirname, '../../..'); // .../YT_combiner
+  const candidates = [
+    process.env.GOOGLE_CREDENTIALS_PATH,
+    path.join(repoRoot, 'python-workers', 'google-credentials.json'),
+    path.join(process.cwd(), '..', 'python-workers', 'google-credentials.json'),
+    path.join(process.cwd(), 'python-workers', 'google-credentials.json'),
+  ].filter(Boolean);
+
+  let foundPath = null;
+  for (const p of candidates) {
+    try {
+      if (p && fs.existsSync(p)) { foundPath = p; break; }
+    } catch {}
+  }
+
+  if (!foundPath) {
+    throw new Error(`Не найден файл учетных данных Google. Укажите GOOGLE_CREDENTIALS_PATH или GOOGLE_CREDENTIALS_JSON. Искомые пути: ${candidates.join(' | ')}`);
+  }
+
+  const creds = JSON.parse(fs.readFileSync(foundPath, 'utf8'));
+  const scopes = ['https://www.googleapis.com/auth/spreadsheets.readonly'];
+  const auth = new google.auth.JWT(
+    creds.client_email,
+    null,
+    creds.private_key,
+    scopes
+  );
+  await auth.authorize();
+  return google.sheets({ version: 'v4', auth });
+}
+
+function mapRowsToObjects(values) {
+  if (!values || values.length === 0) return { headers: [], rows: [] };
+  const headers = values[0].map((h) => String(h || '').trim());
+  const rows = values.slice(1).map((r) => {
+    const obj = {};
+    headers.forEach((h, i) => { obj[h || `col_${i+1}`] = r[i]; });
+    return obj;
+  });
+  return { headers, rows };
+}
+
+router.get('/sheets', async (req, res) => {
+  try {
+    const spreadsheetId = String(req.query.spreadsheetId || '').trim();
+    const sheet = String(req.query.sheet || 'Videos');
+    const page = Math.max(1, parseInt(String(req.query.page || '1'), 10));
+    const pageSize = Math.min(100, Math.max(1, parseInt(String(req.query.pageSize || '10'), 10)));
+    if (!spreadsheetId) {
+      return res.status(400).json({ success: false, error: 'spreadsheetId обязателен' });
+    }
+
+    const sheets = await getSheetsClient();
+    const range = `${sheet}`; // вся страница; пагинация на сервере после чтения
+    const { data } = await sheets.spreadsheets.values.get({ spreadsheetId, range });
+    const { headers, rows } = mapRowsToObjects(data.values || []);
+    const total = rows.length;
+    const start = (page - 1) * pageSize;
+    const end = Math.min(start + pageSize, total);
+    const pageRows = rows.slice(start, end);
+
+    res.json({ success: true, headers, rows: pageRows, total, page, pageSize });
+  } catch (error) {
+    console.error('❌ Ошибка чтения Google Sheets:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});

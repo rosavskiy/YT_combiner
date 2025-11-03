@@ -1,4 +1,6 @@
 import express from 'express';
+import SettingsModel from '../models/SettingsSQLite.js';
+import { getAllCountryCodes } from '../config/countries.js';
 
 const router = express.Router();
 
@@ -48,6 +50,37 @@ router.get('/settings', (req, res) => {
       hasRedis: !!process.env.REDIS_HOST
     }
   });
+});
+
+/**
+ * GET /api/config/tracked-countries
+ * Получить списки отслеживаемых стран для трендов и тем
+ */
+router.get('/tracked-countries', (req, res) => {
+  const data = SettingsModel.getTrackedCountries();
+  res.json({ success: true, ...data });
+});
+
+/**
+ * PUT /api/config/tracked-countries
+ * Сохранить списки отслеживаемых стран
+ * body: { trends?: string[], topics?: string[] }
+ */
+router.put('/tracked-countries', (req, res) => {
+  const { trends, topics } = req.body || {};
+  const allowed = new Set(getAllCountryCodes());
+
+  const validate = (arr) => Array.isArray(arr) && arr.every((c) => allowed.has(c));
+
+  if (trends && !validate(trends)) {
+    return res.status(400).json({ success: false, error: 'Некорректные коды стран для трендов' });
+  }
+  if (topics && !validate(topics)) {
+    return res.status(400).json({ success: false, error: 'Некорректные коды стран для тем' });
+  }
+
+  const saved = SettingsModel.setTrackedCountries({ trends, topics });
+  res.json({ success: true, ...saved });
 });
 
 export default router;
