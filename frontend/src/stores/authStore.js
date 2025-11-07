@@ -23,13 +23,13 @@ const useAuthStore = create(
           
           if (method === 'password') {
             // Авторизация по логину и паролю
-            response = await axios.post(`${API_URL}/api/auth/login`, {
+            response = await axios.post(`${API_URL}/auth/login`, {
               login: credentials.login,
               password: credentials.password
             });
           } else {
             // Авторизация через Telegram
-            response = await axios.post(`${API_URL}/api/auth/telegram`, credentials);
+            response = await axios.post(`${API_URL}/auth/telegram`, credentials);
           }
           
           if (response.data.success) {
@@ -77,7 +77,7 @@ const useAuthStore = create(
         if (!token) return;
 
         try {
-          const response = await axios.get(`${API_URL}/api/auth/me`, {
+          const response = await axios.get(`${API_URL}/auth/me`, {
             headers: { Authorization: `Bearer ${token}` }
           });
 
