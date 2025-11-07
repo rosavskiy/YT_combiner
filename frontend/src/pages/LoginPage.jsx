@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Typography, Space, Alert, Spin, Form, Input, Button, Tabs } from 'antd';
+import { Card, Typography, Space, Alert, Spin, Form, Input, Button, Divider } from 'antd';
 import { SendOutlined, CheckCircleOutlined, ClockCircleOutlined, UserOutlined, LockOutlined } from '@ant-design/icons';
 import useAuthStore from '../stores/authStore';
 import { useNavigate } from 'react-router-dom';
@@ -12,7 +12,7 @@ const LoginPage = () => {
   const [loginForm] = Form.useForm();
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState(null);
-  const [activeTab, setActiveTab] = useState('password'); // отслеживаем активную вкладку
+  // Одна страница без вкладок: форма логина + Telegram widget ниже
 
   useEffect(() => {
     // Если пользователь уже авторизован и подтвержден, перенаправляем на главную
@@ -46,13 +46,11 @@ const LoginPage = () => {
     }
   };
 
-  // Встраиваем Telegram widget ТОЛЬКО когда активна вкладка "telegram" и контейнер уже присутствует в DOM
+  // Встраиваем Telegram widget при монтировании страницы (контейнер находится в разметке сразу)
   useEffect(() => {
-    if (activeTab !== 'telegram') return;
     const container = document.getElementById('telegram-login-container');
-    if (!container) return; // контейнер еще не смонтирован
+    if (!container) return;
 
-    // Очищаем контейнер (на случай повторного открытия вкладки)
     container.innerHTML = '';
 
     const script = document.createElement('script');
@@ -61,11 +59,10 @@ const LoginPage = () => {
     script.setAttribute('data-size', 'large');
     script.setAttribute('data-radius', '8');
     script.setAttribute('data-lang', 'ru');
-    script.setAttribute('data-onauth', 'onTelegramAuth(user)'); // callback
+    script.setAttribute('data-onauth', 'onTelegramAuth(user)');
     script.setAttribute('data-request-access', 'write');
     script.async = true;
 
-    // Глобальная функция для обработки авторизации
     window.onTelegramAuth = async (tgUser) => {
       try {
         const result = await login(tgUser, 'telegram');
@@ -81,7 +78,7 @@ const LoginPage = () => {
     return () => {
       delete window.onTelegramAuth;
     };
-  }, [activeTab, login, navigate]);
+  }, [login, navigate]);
 
   if (isAuthenticated && requiresApproval) {
     return (
@@ -123,120 +120,82 @@ const LoginPage = () => {
       justifyContent: 'center',
       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
     }}>
-      <Card style={{ maxWidth: 500, width: '90%' }}>
+      <Card style={{ maxWidth: 520, width: '90%' }}>
         <Space direction="vertical" size="large" style={{ width: '100%', textAlign: 'center' }}>
           <div>
-            <SendOutlined style={{ fontSize: 64, color: '#0088cc' }} />
-            <Title level={2} style={{ marginTop: 16 }}>YT Zavod</Title>
-            <Paragraph type="secondary">
-              Войдите для доступа к системе
-            </Paragraph>
+            <Title level={2} style={{ margin: 0 }}>Вход в систему</Title>
           </div>
 
-          <Tabs 
-            activeKey={activeTab}
-            onChange={setActiveTab}
-            centered
-            items={[
-              {
-                key: 'password',
-                label: (
-                  <span>
-                    <LockOutlined />
-                    Логин и пароль
-                  </span>
-                ),
-                children: (
-                  <>
-                    {loginError && (
-                      <Alert
-                        message="Ошибка"
-                        description={loginError}
-                        type="error"
-                        closable
-                        onClose={() => setLoginError(null)}
-                        showIcon
-                        style={{ marginBottom: 16 }}
-                      />
-                    )}
+          {loginError && (
+            <Alert
+              message="Ошибка"
+              description={loginError}
+              type="error"
+              closable
+              onClose={() => setLoginError(null)}
+              showIcon
+            />
+          )}
 
-                    <Form
-                      form={loginForm}
-                      onFinish={handlePasswordLogin}
-                      layout="vertical"
-                      size="large"
-                    >
-                      <Form.Item
-                        name="login"
-                        rules={[{ required: true, message: 'Введите логин' }]}
-                      >
-                        <Input 
-                          prefix={<UserOutlined />} 
-                          placeholder="Логин"
-                        />
-                      </Form.Item>
+          <Form
+            form={loginForm}
+            onFinish={handlePasswordLogin}
+            layout="vertical"
+            size="large"
+            style={{ textAlign: 'left' }}
+          >
+            <Form.Item
+              name="login"
+              label="Логин"
+              rules={[{ required: true, message: 'Введите логин' }]}
+            >
+              <Input prefix={<UserOutlined />} placeholder="Логин" />
+            </Form.Item>
 
-                      <Form.Item
-                        name="password"
-                        rules={[{ required: true, message: 'Введите пароль' }]}
-                      >
-                        <Input.Password 
-                          prefix={<LockOutlined />} 
-                          placeholder="Пароль"
-                        />
-                      </Form.Item>
+            <Form.Item
+              name="password"
+              label="Пароль"
+              rules={[{ required: true, message: 'Введите пароль' }]}
+            >
+              <Input.Password prefix={<LockOutlined />} placeholder="Пароль" />
+            </Form.Item>
 
-                      <Form.Item>
-                        <Button 
-                          type="primary" 
-                          htmlType="submit" 
-                          block
-                          loading={loginLoading}
-                        >
-                          Войти
-                        </Button>
-                      </Form.Item>
-                    </Form>
-                  </>
-                )
-              },
-              {
-                key: 'telegram',
-                label: (
-                  <span>
-                    <SendOutlined />
-                    Telegram
-                  </span>
-                ),
-                children: (
-                  <>
-                    {error && (
-                      <Alert
-                        message="Ошибка авторизации"
-                        description={error}
-                        type="error"
-                        closable
-                        showIcon
-                        style={{ marginBottom: 16 }}
-                      />
-                    )}
+            <Form.Item style={{ marginTop: 8 }}>
+              <Button type="primary" htmlType="submit" block loading={loginLoading}>
+                Войти
+              </Button>
+            </Form.Item>
+          </Form>
 
-                    {isLoading ? (
-                      <Spin size="large" />
-                    ) : (
-                      <div id="telegram-login-container" style={{ margin: '20px 0' }} />
-                    )}
+          <Paragraph type="secondary" style={{ marginTop: -8 }}>
+            Новые пользователи входят только через Telegram ниже.
+          </Paragraph>
 
-                    <Alert
-                      message="Первый вход"
-                      description="При первом входе ваш аккаунт должен быть подтвержден администратором"
-                      type="info"
-                      showIcon
-                    />
-                  </>
-                )
-              }
-            ]}
+          <Divider plain>или</Divider>
+
+          {error && (
+            <Alert
+              message="Ошибка авторизации"
+              description={error}
+              type="error"
+              closable
+              showIcon
+            />
+          )}
+
+          <Text strong>Войти через Telegram</Text>
+
+          {isLoading ? (
+            <Spin size="large" />
+          ) : (
+            <div id="telegram-login-container" style={{ margin: '8px 0 0 0' }} />
+          )}
+
+          <Alert
+            message="Первый вход"
+            description="При первом входе ваш аккаунт должен быть подтвержден администратором"
+            type="info"
+            showIcon
           />
 
           <div style={{ marginTop: 20, fontSize: 12, color: '#999' }}>
