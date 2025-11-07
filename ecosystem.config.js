@@ -20,8 +20,8 @@ module.exports = {
     },
     {
       name: 'yt-combiner-python',
-      script: './python-workers/app.py',
-      interpreter: 'python3',
+      script: './app.py',
+      interpreter: './venv/bin/python',
       cwd: './python-workers',
       instances: 1,
       autorestart: true,

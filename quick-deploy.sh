@@ -68,7 +68,18 @@ echo -e "${GREEN}✓ Frontend собран${NC}"
 # Шаг 6: Python Workers
 echo -e "${YELLOW}🐍 Настройка Python Workers...${NC}"
 cd $PROJECT_DIR/python-workers
-pip3 install -r requirements.txt
+
+# Создать виртуальное окружение если его нет
+if [ ! -d "venv" ]; then
+    python3 -m venv venv
+    echo -e "${GREEN}✓ Python venv создан${NC}"
+fi
+
+# Активировать и установить зависимости
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+deactivate
 echo -e "${GREEN}✓ Python зависимости установлены${NC}"
 
 # Шаг 7: Инициализация БД
