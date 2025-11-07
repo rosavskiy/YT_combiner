@@ -1,5 +1,5 @@
 import React from 'react';
-import { Layout, Menu } from 'antd';
+import { Layout, Menu, Avatar, Dropdown, Space } from 'antd';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   DashboardOutlined,
@@ -9,14 +9,39 @@ import {
   VideoCameraOutlined,
   SettingOutlined,
   YoutubeOutlined,
-  EyeOutlined
+  EyeOutlined,
+  TeamOutlined,
+  UserOutlined,
+  LogoutOutlined
 } from '@ant-design/icons';
+import useAuthStore from '../stores/authStore';
 
 const { Sider } = Layout;
 
 const Sidebar = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, logout, isAdmin } = useAuthStore();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
+  const userMenuItems = [
+    {
+      key: 'profile',
+      icon: <UserOutlined />,
+      label: 'Профиль',
+    },
+    {
+      key: 'logout',
+      icon: <LogoutOutlined />,
+      label: 'Выход',
+      danger: true,
+      onClick: handleLogout
+    }
+  ];
 
   const menuItems = [
     {
@@ -50,11 +75,25 @@ const Sidebar = () => {
       label: 'Генератор',
     },
     {
+      key: '/ai-tasks',
+      icon: <VideoCameraOutlined />,
+      label: 'AI задачи',
+    },
+    {
       key: '/settings',
       icon: <SettingOutlined />,
       label: 'Настройки',
     },
   ];
+
+  // Добавляем пункт "Пользователи" для администраторов
+  if (isAdmin()) {
+    menuItems.push({
+      key: '/users',
+      icon: <TeamOutlined />,
+      label: 'Пользователи',
+    });
+  }
 
   return (
     <Sider
@@ -90,6 +129,42 @@ const Sidebar = () => {
         items={menuItems}
         onClick={({ key }) => navigate(key)}
       />
+
+      {/* Информация о пользователе внизу */}
+      {user && (
+        <div style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          padding: '16px',
+          borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+          background: 'rgba(0, 0, 0, 0.2)'
+        }}>
+          <Dropdown 
+            menu={{ items: userMenuItems }}
+            placement="topLeft"
+            trigger={['click']}
+          >
+            <Space style={{ cursor: 'pointer', width: '100%' }}>
+              <Avatar 
+                src={user.photo_url} 
+                icon={<UserOutlined />}
+                size="small"
+              />
+              <div style={{ 
+                color: 'white', 
+                flex: 1,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}>
+                {user.first_name}
+              </div>
+            </Space>
+          </Dropdown>
+        </div>
+      )}
     </Sider>
   );
 };

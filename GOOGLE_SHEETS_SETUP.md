@@ -47,15 +47,43 @@
 5. Выберите **JSON**
 6. Файл автоматически скачается на компьютер
 
-### Шаг 5: Установить ключ в проект
+### Шаг 5: Настроить ключ через переменные окружения (рекомендуется)
 
-1. Переместите скачанный JSON файл в `python-workers/`
-2. Переименуйте в `google-credentials.json`
+Чтобы не хранить секреты в репозитории, используйте один из вариантов:
 
-```powershell
-# Пример для PowerShell
-Move-Item "C:\Downloads\yt-zavod-parser-*.json" "D:\Projects\YT_combiner\python-workers\google-credentials.json"
+Вариант A — файл на диске (рекомендовано)
+- Оставьте JSON ключ в любом безопасном месте на диске (НЕ в гите)
+- В корневом `.env` добавьте:
+
+```properties
+# Путь к файлу ключа сервисного аккаунта
+GOOGLE_CREDENTIALS_PATH=D:\Projects\YT_combiner\python-workers\google-credentials.json
 ```
+
+Вариант B — стандарт Google
+- Используйте переменную `GOOGLE_APPLICATION_CREDENTIALS`:
+
+```properties
+GOOGLE_APPLICATION_CREDENTIALS=D:\path\to\service-account.json
+```
+
+Вариант C — без файла (JSON в переменной)
+- Можно положить JSON напрямую в переменную (удобно для CI)
+- Разрешены raw JSON и base64:
+
+```properties
+# raw JSON (одной строкой)
+GOOGLE_CREDENTIALS_JSON={"type":"service_account", ...}
+
+# или base64 того же JSON
+GOOGLE_CREDENTIALS_JSON=eyJ0eXBlIjoic2VydmljZV9hY2NvdW50IiwgLi4ufQ==
+```
+
+Совместимость (устаревающий способ)
+- Можно по-прежнему положить ключ рядом со скриптами: `python-workers/google-credentials.json`
+- Этот файл добавлен в `.gitignore` и не попадёт в репозиторий
+
+> Примечание: Backend и Python-скрипт автоматически подхватят `.env` из корня. Ничего дополнительно стартовать не нужно — просто перезапустите сервер, если он уже был запущен.
 
 ### Шаг 6: Создать Google Sheets документ
 
@@ -91,13 +119,16 @@ Move-Item "C:\Downloads\yt-zavod-parser-*.json" "D:\Projects\YT_combiner\python-
 cd python-workers
 
 # Парсинг с сохранением в Google Sheets
-python video_parser.py dQw4w9WgXcQ --credentials google-credentials.json --spreadsheet 1a2B3c4D5e6F7g8H9i0J_EXAMPLE
+python video_parser.py dQw4w9WgXcQ --spreadsheet 1a2B3c4D5e6F7g8H9i0J_EXAMPLE
 
 # Парсинг только с сохранением в JSON
 python video_parser.py dQw4w9WgXcQ
 
 # Указать языки для транскрипта
 python video_parser.py dQw4w9WgXcQ --languages ru en de
+ 
+# (Опционально) Явный путь к ключу, если не используете .env
+python video_parser.py dQw4w9WgXcQ --credentials google-credentials.json --spreadsheet 1a2B3c4D5e6F7g8H9i0J_EXAMPLE
 ```
 
 ### Формат данных в Google Sheets
@@ -180,8 +211,14 @@ pip install -r requirements.txt
 - Подождите 1-2 минуты после включения API
 
 ### Ошибка: "Invalid credentials"
-- Проверьте путь к `google-credentials.json`
+- Если используете файл: проверьте `GOOGLE_CREDENTIALS_PATH` или `GOOGLE_APPLICATION_CREDENTIALS`
+- Если используете JSON в переменной: проверьте формат `GOOGLE_CREDENTIALS_JSON` (raw или base64)
+- При необходимости укажите `--credentials` явно и проверьте, что файл существует
 - Убедитесь, что файл не поврежден (валидный JSON)
+
+### Секреты попали в репозиторий
+- Немедленно удалите ключи из истории (BFG/git-filter-repo) и ротируйте ключ в Google Cloud
+- В дальнейшем используйте `.env` и держите секреты fuera репозитория
 
 ### Субтитры не найдены
 - Не у всех видео есть субтитры

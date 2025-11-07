@@ -566,8 +566,11 @@ class VideoParser:
     def _transcribe_via_openai_whisper(self, video_id: str, api_key: str):
         """Распознать речь без скачивания видео на диск: забираем аудио поток и отправляем в OpenAI Whisper API."""
         try:
+            # Динамический импорт, чтобы не требовать обязательной установки openai
+            import importlib
             try:
-                from openai import OpenAI
+                _openai = importlib.import_module('openai')
+                OpenAI = getattr(_openai, 'OpenAI')
             except Exception:
                 print("[WARN] Библиотека openai не установлена — пропускаем ASR")
                 return None

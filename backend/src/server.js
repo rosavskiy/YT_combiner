@@ -1,6 +1,9 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import helmet from 'helmet';
@@ -15,6 +18,7 @@ import configRouter from './routes/config.js';
 import topicsRouter from './routes/topics.js';
 import systemRouter from './routes/system.js';
 import channelsRouter from './routes/channels.js';
+import authRouter from './routes/auth.js';
 
 // Config
 // MongoDB отключен по умолчанию (используем SQLite)
@@ -22,8 +26,37 @@ import channelsRouter from './routes/channels.js';
 import { initDatabase } from './config/sqlite.js';
 import { COUNTRIES } from './config/countries.js';
 
-// Load environment variables
-dotenv.config({ path: '../.env' });
+// Load environment variables (.env from repo root or backend folder)
+(() => {
+  try {
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    const candidates = [
+      // repo root: backend/src -> ../../.env
+      path.resolve(__dirname, '../../.env'),
+      // backend folder
+      path.resolve(__dirname, '../.env'),
+      // cwd fallback
+      path.resolve(process.cwd(), '.env'),
+    ];
+    let loaded = false;
+    for (const p of candidates) {
+      try {
+        if (fs.existsSync(p)) {
+          dotenv.config({ path: p });
+          loaded = true;
+          break;
+        }
+      } catch {}
+    }
+    if (!loaded) {
+      // as last resort try default lookup
+      dotenv.config();
+    }
+  } catch {
+    dotenv.config();
+  }
+})();
 
 const app = express();
 const httpServer = createServer(app);
@@ -78,6 +111,7 @@ app.get('/health', (req, res) => {
 });
 
 // API Routes
+app.use('/api/auth', authRouter);
 app.use('/api/trends', trendsRouter);
 app.use('/api/videos', videosRouter);
 app.use('/api/generator', generatorRouter);

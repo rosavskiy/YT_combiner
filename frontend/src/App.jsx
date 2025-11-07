@@ -1,8 +1,9 @@
 import React, { useEffect } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { ConfigProvider, Layout, theme, App as AntdApp } from 'antd';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { ConfigProvider, theme, App as AntdApp } from 'antd';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import Sidebar from './components/Sidebar';
+import ProtectedLayout from './components/ProtectedLayout';
+import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
 import TrendsPage from './pages/TrendsPage';
 import TopicsPage from './pages/TopicsPage';
@@ -10,9 +11,10 @@ import DownloadPage from './pages/DownloadPage';
 import TrackingPage from './pages/TrackingPage';
 import GeneratorPage from './pages/GeneratorPage';
 import SettingsPage from './pages/SettingsPage';
+import AITasksPage from './pages/AITasksPage';
+import UsersManagementPage from './pages/UsersManagementPage';
 import { useSocketStore } from './stores/socketStore';
-
-const { Content } = Layout;
+import useAuthStore from './stores/authStore';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -26,14 +28,19 @@ const queryClient = new QueryClient({
 
 function App() {
   const { connect } = useSocketStore();
+  const { isAuthenticated, token, fetchCurrentUser } = useAuthStore();
 
   useEffect(() => {
+    // Подключаем WebSocket
     connect();
-    
-    return () => {
-      // Cleanup on unmount
-    };
   }, [connect]);
+
+  useEffect(() => {
+    // Проверяем текущего пользователя при загрузке, если есть токен
+    if (token && isAuthenticated) {
+      fetchCurrentUser();
+    }
+  }, [token]); // Только при изменении токена
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -48,22 +55,26 @@ function App() {
       >
         <AntdApp>
           <BrowserRouter>
-            <Layout style={{ minHeight: '100vh' }}>
-              <Sidebar />
-              <Layout>
-                <Content style={{ padding: '24px', background: '#f0f2f5', minHeight: '100vh' }}>
-                  <Routes>
-                    <Route path="/" element={<Dashboard />} />
-                    <Route path="/trends" element={<TrendsPage />} />
-                    <Route path="/topics" element={<TopicsPage />} />
-                    <Route path="/tracking" element={<TrackingPage />} />
-                    <Route path="/download" element={<DownloadPage />} />
-                    <Route path="/generator" element={<GeneratorPage />} />
-                    <Route path="/settings" element={<SettingsPage />} />
-                  </Routes>
-                </Content>
-              </Layout>
-            </Layout>
+            <Routes>
+              {/* Публичный маршрут для авторизации */}
+              <Route path="/login" element={<LoginPage />} />
+              
+              {/* Защищенные маршруты */}
+              <Route path="/" element={<ProtectedLayout><Dashboard /></ProtectedLayout>} />
+              <Route path="/trends" element={<ProtectedLayout><TrendsPage /></ProtectedLayout>} />
+              <Route path="/topics" element={<ProtectedLayout><TopicsPage /></ProtectedLayout>} />
+              <Route path="/tracking" element={<ProtectedLayout><TrackingPage /></ProtectedLayout>} />
+              <Route path="/download" element={<ProtectedLayout><DownloadPage /></ProtectedLayout>} />
+              <Route path="/generator" element={<ProtectedLayout><GeneratorPage /></ProtectedLayout>} />
+              <Route path="/ai-tasks" element={<ProtectedLayout><AITasksPage /></ProtectedLayout>} />
+              <Route path="/settings" element={<ProtectedLayout><SettingsPage /></ProtectedLayout>} />
+              
+              {/* Админ маршруты */}
+              <Route path="/users" element={<ProtectedLayout requireAdmin><UsersManagementPage /></ProtectedLayout>} />
+
+              {/* Редирект на главную для неизвестных маршрутов */}
+              <Route path="*" element={<Navigate to="/login" replace />} />
+            </Routes>
           </BrowserRouter>
         </AntdApp>
       </ConfigProvider>

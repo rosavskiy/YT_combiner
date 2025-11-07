@@ -53,6 +53,15 @@ export const generatorService = {
     api.get('/generator/sheets', {
       params: { spreadsheetId, sheet, page, pageSize }
     }),
+
+  // AI генерация видео на сервере
+  aiGenerate: (payload) =>
+    api.post('/generator/ai/generate', payload),
+  aiStatus: (jobId) => api.get(`/generator/ai/status/${jobId}`),
+  aiDownloadUrl: (jobId) => `/api/generator/ai/download/${jobId}`,
+  aiTasks: ({ q = '', status = '', provider = '', limit = 50, page = 1 } = {}) =>
+    api.get('/generator/ai/tasks', { params: { q, status, provider, limit, page } }),
+  aiRetry: (jobId) => api.post(`/generator/ai/retry/${jobId}`),
 };
 
 export const configService = {

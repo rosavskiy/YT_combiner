@@ -87,6 +87,52 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_channels_channel_id ON channels(channel_id);
   `);
 
+  // Таблица AI-задач (история генерации видео)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ai_tasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_id TEXT UNIQUE,
+      prompt TEXT,
+      provider TEXT,
+      options TEXT,
+      status TEXT DEFAULT 'pending',
+      result_path TEXT,
+      error TEXT,
+      spreadsheet_id TEXT,
+      sheet TEXT,
+      row_index INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      finished_at DATETIME
+    )
+  `);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_ai_tasks_status ON ai_tasks(status);
+  `);
+
+  // Таблица пользователей (авторизация через Telegram + логин/пароль)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      telegram_id INTEGER UNIQUE,
+      login TEXT UNIQUE,
+      password_hash TEXT,
+      username TEXT,
+      first_name TEXT,
+      last_name TEXT,
+      photo_url TEXT,
+      role TEXT DEFAULT 'user' CHECK(role IN ('admin', 'user')),
+      is_approved INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id);
+    CREATE INDEX IF NOT EXISTS idx_users_login ON users(login);
+    CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+    CREATE INDEX IF NOT EXISTS idx_users_is_approved ON users(is_approved);
+  `);
+
   console.log('✅ SQLite база данных инициализирована');
   console.log(`📁 Путь к БД: ${dbPath}`);
 }

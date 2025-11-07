@@ -16,8 +16,10 @@ const __dirname = path.dirname(__filename);
 class VideoDownloadService {
   constructor() {
     // Пытаемся создать очереди (Redis). Если Redis недоступен — переходим в inline-режим
-    this.inlineMode = false;
+    const disableRedis = String(process.env.REDIS_DISABLE || '').toLowerCase();
+    this.inlineMode = disableRedis === '1' || disableRedis === 'true' || disableRedis === 'yes';
     try {
+      if (this.inlineMode) throw new Error('Redis принудительно отключён через REDIS_DISABLE');
       // Создать очередь для скачивания
       this.downloadQueue = new Bull('video-downloads', {
         redis: {
@@ -41,6 +43,20 @@ class VideoDownloadService {
           stalledInterval: 30000, // 30s
           maxStalledCount: 3,
         },
+      });
+      // Если Redis недоступен, Bull обычно не бросает в конструкторе. Добавим быструю проверку готовности с таймаутом.
+      const ready = Promise.all([
+        this.downloadQueue.isReady(),
+        this.parseQueue.isReady(),
+      ]);
+      const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('Redis ready timeout')), 1200));
+      ready.catch(() => { /* ignore */ });
+      timeout.catch(() => { /* ignore */ });
+      Promise.race([ready, timeout]).catch(() => {
+        this.inlineMode = true;
+        try { this.downloadQueue && this.downloadQueue.close().catch(() => {}); } catch {}
+        try { this.parseQueue && this.parseQueue.close().catch(() => {}); } catch {}
+        console.warn('⚠️ Redis не готов — включён inline-режим очередей');
       });
     } catch (e) {
       console.warn('⚠️ Redis недоступен, включен inline-режим очередей (без прогресса).', e?.message);
@@ -310,30 +326,27 @@ class VideoDownloadService {
     }
 
     // Обычный путь через Bull/Redis
-    const job = await this.downloadQueue.add(
-      {
-        videoId,
-        quality,
-        userId,
-        createdAt: new Date(),
-      },
-      {
-        attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 5000,
+    try {
+      const job = await this.downloadQueue.add(
+        {
+          videoId,
+          quality,
+          userId,
+          createdAt: new Date(),
         },
-        removeOnComplete: false,
-        removeOnFail: false,
-      }
-    );
-
-    return {
-      jobId: job.id,
-      videoId,
-      quality,
-      status: 'pending',
-    };
+        {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 5000 },
+          removeOnComplete: false,
+          removeOnFail: false,
+        }
+      );
+      return { jobId: job.id, videoId, quality, status: 'pending' };
+    } catch (e) {
+      // Фолбэк, если Redis упал после запуска
+      this.inlineMode = true;
+      return this.addDownloadJob(videoId, quality, userId);
+    }
   }
 
   /**
@@ -360,31 +373,29 @@ class VideoDownloadService {
       }
     }
 
-    const job = await this.parseQueue.add(
-      {
-        videoId,
-        languages,
-  spreadsheetId,
-  translateTo,
-        userId,
-        createdAt: new Date(),
-      },
-      {
-        attempts: 5,
-        backoff: {
-          type: 'exponential',
-          delay: 5000,
+    try {
+      const job = await this.parseQueue.add(
+        {
+          videoId,
+          languages,
+          spreadsheetId,
+          translateTo,
+          userId,
+          createdAt: new Date(),
         },
-        removeOnComplete: false,
-        removeOnFail: false,
-      }
-    );
-
-    return {
-      jobId: job.id,
-      videoId,
-      status: 'pending',
-    };
+        {
+          attempts: 5,
+          backoff: { type: 'exponential', delay: 5000 },
+          removeOnComplete: false,
+          removeOnFail: false,
+        }
+      );
+      return { jobId: job.id, videoId, status: 'pending' };
+    } catch (e) {
+      // Фолбэк, если Redis недоступен
+      this.inlineMode = true;
+      return this.addParseJob(videoId, options);
+    }
   }
 
   /**
@@ -432,13 +443,19 @@ class VideoDownloadService {
       return { waiting: [], active: [], completed: [], failed: [] };
     }
     const queue = queueType === 'download' ? this.downloadQueue : this.parseQueue;
-
-    const [waiting, active, completed, failed] = await Promise.all([
-      queue.getWaiting(),
-      queue.getActive(),
-      queue.getCompleted(),
-      queue.getFailed(),
-    ]);
+    let waiting = [], active = [], completed = [], failed = [];
+    try {
+      [waiting, active, completed, failed] = await Promise.all([
+        queue.getWaiting(),
+        queue.getActive(),
+        queue.getCompleted(),
+        queue.getFailed(),
+      ]);
+    } catch (e) {
+      // Фолбэк без Redis
+      this.inlineMode = true;
+      return { waiting: [], active: [], completed: [], failed: [] };
+    }
 
     const formatJob = async (job) => {
       const state = await job.getState();
@@ -519,23 +536,27 @@ class VideoDownloadService {
       return { waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0, total: 0 };
     }
     const queue = queueType === 'download' ? this.downloadQueue : this.parseQueue;
+    try {
+      const [waiting, active, completed, failed, delayed] = await Promise.all([
+        queue.getWaitingCount(),
+        queue.getActiveCount(),
+        queue.getCompletedCount(),
+        queue.getFailedCount(),
+        queue.getDelayedCount(),
+      ]);
 
-    const [waiting, active, completed, failed, delayed] = await Promise.all([
-      queue.getWaitingCount(),
-      queue.getActiveCount(),
-      queue.getCompletedCount(),
-      queue.getFailedCount(),
-      queue.getDelayedCount(),
-    ]);
-
-    return {
-      waiting,
-      active,
-      completed,
-      failed,
-      delayed,
-      total: waiting + active + completed + failed + delayed,
-    };
+      return {
+        waiting,
+        active,
+        completed,
+        failed,
+        delayed,
+        total: waiting + active + completed + failed + delayed,
+      };
+    } catch (e) {
+      this.inlineMode = true;
+      return { waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0, total: 0 };
+    }
   }
 
   /**

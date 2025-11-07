@@ -205,6 +205,13 @@ const DownloadPage = () => {
       render: (status) => <StatusTag status={status} type="download" />,
     },
     {
+      title: 'Создано',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      width: 180,
+      render: (val) => val ? new Date(val).toLocaleString() : '-',
+    },
+    {
       title: 'Видео',
       dataIndex: 'videoId',
       key: 'videoId',
@@ -345,6 +352,13 @@ const DownloadPage = () => {
       key: 'status',
       width: 100,
       render: (status) => <StatusTag status={status} type="parse" />,
+    },
+    {
+      title: 'Создано',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      width: 180,
+      render: (val) => val ? new Date(val).toLocaleString() : '-',
     },
     {
       title: 'Видео',
