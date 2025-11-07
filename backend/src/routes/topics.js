@@ -1,5 +1,6 @@
 import express from 'express';
 import YouTubeTrendsService from '../services/youtubeTrendsService.js';
+import { authenticateToken, requireApproved } from '../middleware/auth.js';
 import { TOPICS, getAllTopics, getTopicById, getTopicsByCategory, getTopicsStats } from '../config/topics.js';
 
 const router = express.Router();
@@ -84,7 +85,7 @@ router.get('/:topicId', (req, res) => {
  * POST /api/topics/search
  * Поиск видео по конкретной теме
  */
-router.post('/search', async (req, res) => {
+router.post('/search', authenticateToken, requireApproved, async (req, res) => {
   try {
     const { apiKey, topicId, region = 'US', maxResults = 10 } = req.body;
     
@@ -182,7 +183,7 @@ router.post('/search', async (req, res) => {
  * POST /api/topics/search-all
  * Поиск видео по всем темам категории
  */
-router.post('/search-all', async (req, res) => {
+router.post('/search-all', authenticateToken, requireApproved, async (req, res) => {
   try {
     const { apiKey, categoryId, region = 'US', maxResults = 5 } = req.body;
     

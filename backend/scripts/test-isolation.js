@@ -117,6 +117,13 @@ async function start() {
   if (userA.is_approved === 0) await approveUser(adminToken, userA.id);
   if (userB.is_approved === 0) await approveUser(adminToken, userB.id);
 
+  // Set different tracked countries per user
+  const setTracked = async (token, trends, topics) => {
+    await axios.put(API + '/config/tracked-countries', { trends, topics }, { headers: { Authorization: 'Bearer ' + token } });
+  };
+  await setTracked(userAToken, ['US','GB','CA'], ['US']);
+  await setTracked(userBToken, ['DE','FR'], ['DE','FR']);
+
   // Create one download job each (fake minimal payload; service will mark pending)
   const vdA = await axios.post(API + '/videos/download', { videoId: 'vid_userA_' + Date.now(), title: 'A video', channel: 'A Channel' }, { headers: { Authorization: 'Bearer ' + userAToken } });
   if (!vdA.data.success) fail('userA', 'Download create failed');
@@ -142,6 +149,12 @@ async function start() {
   const impTotal = impStats.data.data.videos.total;
   if (impTotal !== totalA) fail('impersonation', 'Impersonated total mismatch');
   log('impersonation', 'Impersonated stats match userA');
+
+  // Verify per-user tracked countries roundtrip
+  const myA = await axios.get(API + '/config/tracked-countries', { headers: { Authorization: 'Bearer ' + userAToken } });
+  const myB = await axios.get(API + '/config/tracked-countries', { headers: { Authorization: 'Bearer ' + userBToken } });
+  if (!Array.isArray(myA.data.trends) || myA.data.trends[0] !== 'US') fail('settingsA', 'UserA settings not saved');
+  if (!Array.isArray(myB.data.trends) || myB.data.trends[0] !== 'DE') fail('settingsB', 'UserB settings not saved');
 
   const revertedToken = await revertImpersonation(impToken); // using impersonated token as admin
   const revStats = await axios.get(API + '/videos/stats', { headers: { Authorization: 'Bearer ' + revertedToken } });

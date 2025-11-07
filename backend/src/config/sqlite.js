@@ -87,6 +87,18 @@ function initDatabase() {
     )
   `);
 
+  // Персональные настройки пользователей (user_id + key)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_settings (
+      user_id INTEGER NOT NULL,
+      key TEXT NOT NULL,
+      value TEXT,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(user_id, key),
+      FOREIGN KEY(user_id) REFERENCES users(id)
+    )
+  `);
+
   // Таблица отслеживаемых каналов
   db.exec(`
     CREATE TABLE IF NOT EXISTS channels (

@@ -3,6 +3,8 @@ import YouTubeTrendsService from '../services/youtubeTrendsService.js';
 import TrendModel from '../models/TrendSQLite.js';
 import { COUNTRIES } from '../config/countries.js';
 import SettingsModel from '../models/SettingsSQLite.js';
+import UserSettingsSQLite from '../models/UserSettingsSQLite.js';
+import { authenticateToken, requireApproved } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -22,7 +24,7 @@ router.get('/countries', (req, res) => {
  * POST /api/trends/fetch-all
  * Получить тренды для всех регионов
  */
-router.post('/fetch-all', async (req, res) => {
+router.post('/fetch-all', authenticateToken, requireApproved, async (req, res) => {
   try {
     const { apiKey } = req.body;
     
@@ -34,7 +36,8 @@ router.post('/fetch-all', async (req, res) => {
     }
 
   // Получаем список отслеживаемых стран (если не настроен — все доступные)
-  const tracked = SettingsModel.getTrackedCountries().trends;
+  const defaults = SettingsModel.getTrackedCountries();
+  const tracked = UserSettingsSQLite.get(req.user.id, 'tracked_countries_trends', defaults.trends) || defaults.trends;
   console.log(`🌍 Начало загрузки трендов из ${tracked.length} стран...`);
     
   const trendsService = new YouTubeTrendsService(apiKey, tracked);
@@ -78,7 +81,7 @@ router.post('/fetch-all', async (req, res) => {
  * POST /api/trends/fetch-region
  * Получить тренды для конкретного региона
  */
-router.post('/fetch-region', async (req, res) => {
+router.post('/fetch-region', authenticateToken, requireApproved, async (req, res) => {
   try {
     const { apiKey, region, maxResults } = req.body;
     

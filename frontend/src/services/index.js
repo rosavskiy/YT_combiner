@@ -79,6 +79,8 @@ export const configService = {
   // Настройки отслеживаемых стран
   getTrackedCountries: () => api.get('/config/tracked-countries'),
   saveTrackedCountries: (payload) => api.put('/config/tracked-countries', payload),
+  // Админ: обзор пользовательских настроек
+  listUsersSettings: () => api.get('/config/users/settings'),
 };
 
 export const worktimeService = {

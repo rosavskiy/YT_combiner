@@ -1,5 +1,7 @@
 import express from 'express';
 import SettingsModel from '../models/SettingsSQLite.js';
+import UserSettingsSQLite from '../models/UserSettingsSQLite.js';
+import { authenticateToken, requireApproved, requireAdmin } from '../middleware/auth.js';
 import { getAllCountryCodes } from '../config/countries.js';
 
 const router = express.Router();
@@ -38,7 +40,7 @@ router.get('/api-key', (req, res) => {
  * GET /api/config/settings
  * Получить все публичные настройки
  */
-router.get('/settings', (req, res) => {
+router.get('/settings', authenticateToken, requireApproved, (req, res) => {
   res.json({
     success: true,
     settings: {
@@ -56,9 +58,12 @@ router.get('/settings', (req, res) => {
  * GET /api/config/tracked-countries
  * Получить списки отслеживаемых стран для трендов и тем
  */
-router.get('/tracked-countries', (req, res) => {
-  const data = SettingsModel.getTrackedCountries();
-  res.json({ success: true, ...data });
+router.get('/tracked-countries', authenticateToken, requireApproved, (req, res) => {
+  // читаем пользовательские списки; если не заданы — дефолтные из SettingsModel
+  const defaults = SettingsModel.getTrackedCountries();
+  const trends = UserSettingsSQLite.get(req.user.id, 'tracked_countries_trends', defaults.trends) || defaults.trends;
+  const topics = UserSettingsSQLite.get(req.user.id, 'tracked_countries_topics', defaults.topics) || defaults.topics;
+  res.json({ success: true, trends, topics });
 });
 
 /**
@@ -66,7 +71,7 @@ router.get('/tracked-countries', (req, res) => {
  * Сохранить списки отслеживаемых стран
  * body: { trends?: string[], topics?: string[] }
  */
-router.put('/tracked-countries', (req, res) => {
+router.put('/tracked-countries', authenticateToken, requireApproved, (req, res) => {
   const { trends, topics } = req.body || {};
   const allowed = new Set(getAllCountryCodes());
 
@@ -79,8 +84,31 @@ router.put('/tracked-countries', (req, res) => {
     return res.status(400).json({ success: false, error: 'Некорректные коды стран для тем' });
   }
 
-  const saved = SettingsModel.setTrackedCountries({ trends, topics });
-  res.json({ success: true, ...saved });
+  if (Array.isArray(trends)) UserSettingsSQLite.set(req.user.id, 'tracked_countries_trends', trends);
+  if (Array.isArray(topics)) UserSettingsSQLite.set(req.user.id, 'tracked_countries_topics', topics);
+  const data = {
+    trends: UserSettingsSQLite.get(req.user.id, 'tracked_countries_trends', []),
+    topics: UserSettingsSQLite.get(req.user.id, 'tracked_countries_topics', []),
+  };
+  res.json({ success: true, ...data });
+});
+
+// Админ: обзор пользовательских настроек (без секретов)
+import UserSQLite from '../models/UserSQLite.js';
+router.get('/users/settings', authenticateToken, requireAdmin, (req, res) => {
+  try {
+    const users = UserSQLite.findAll();
+    const data = users.map(u => ({
+      user: { id: u.id, login: u.login, username: u.username, first_name: u.first_name, last_name: u.last_name },
+      settings: {
+        tracked_countries_trends: UserSettingsSQLite.get(u.id, 'tracked_countries_trends', null),
+        tracked_countries_topics: UserSettingsSQLite.get(u.id, 'tracked_countries_topics', null),
+      }
+    }));
+    res.json({ success: true, data });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
 });
 
 export default router;
