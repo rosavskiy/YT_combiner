@@ -4,27 +4,33 @@
 
 ## 📋 Требования
 
-- **VPS**: Ubuntu 20.04/22.04 или Debian 11/12
-- **RAM**: минимум 2GB
-- **CPU**: минимум 1 core
+- **VPS**: Ubuntu 20.04/22.04/24.04 или Debian 11/12
+- **RAM**: минимум 2GB (рекомендуется 4GB)
+- **CPU**: минимум 1 core (рекомендуется 2 cores)
 - **Disk**: минимум 20GB
 - **Домен**: настроенный DNS A-record на IP сервера
 
 ## 🔧 Подготовка сервера
 
-### 1. Обновление системы
+### 1. Исправление dpkg (если была ошибка при upgrade)
+
+```bash
+sudo dpkg --configure -a
+```
+
+### 2. Обновление системы
 
 ```bash
 sudo apt update && sudo apt upgrade -y
 ```
 
-### 2. Установка Node.js 18.x
+### 3. Установка Node.js 20.x LTS
 
 ```bash
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install -y nodejs
-node --version  # Проверка: v18.x.x
-npm --version   # Проверка: 9.x.x
+node --version  # Проверка: v20.x.x
+npm --version   # Проверка: 10.x.x
 ```
 
 ### 3. Установка Python 3 и pip
