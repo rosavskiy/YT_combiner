@@ -7,10 +7,10 @@ class VideoModel {
   static upsert(videoData) {
     const stmt = db.prepare(`
       INSERT INTO videos (
-        video_id, title, description, channel, channel_id,
+        video_id, title, description, channel, channel_id, owner_user_id,
         views, likes, comments, duration, category_id, region, 
         quality, status, job_id, data
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(video_id) DO UPDATE SET
         title = excluded.title,
         views = excluded.views,
@@ -27,6 +27,7 @@ class VideoModel {
       videoData.description,
       videoData.channel,
       videoData.channelId,
+      videoData.ownerUserId || null,
       videoData.views || 0,
       videoData.likes || 0,
       videoData.comments || 0,
@@ -62,13 +63,13 @@ class VideoModel {
   /**
    * Получить все видео
    */
-  static findAll() {
-    const stmt = db.prepare(`
-      SELECT * FROM videos 
-      ORDER BY created_at DESC
-    `);
-
-    return stmt.all().map(row => ({
+  static findAll({ owner_user_id = null, isAdmin = false } = {}) {
+    const sql = isAdmin
+      ? `SELECT * FROM videos ORDER BY created_at DESC`
+      : `SELECT * FROM videos WHERE owner_user_id = ? ORDER BY created_at DESC`;
+    const stmt = db.prepare(sql);
+    const rows = isAdmin ? stmt.all() : stmt.all(owner_user_id);
+    return rows.map(row => ({
       ...row,
       data: row.data ? JSON.parse(row.data) : {},
       downloaded: Boolean(row.downloaded),
@@ -79,15 +80,12 @@ class VideoModel {
   /**
    * Получить все скачанные видео
    */
-  static findDownloaded() {
-    const stmt = db.prepare(`
-      SELECT video_id, title, channel, download_path, downloaded_at, views, quality, status
-      FROM videos
-      WHERE downloaded = 1
-      ORDER BY downloaded_at DESC
-    `);
-
-    return stmt.all();
+  static findDownloaded({ owner_user_id = null, isAdmin = false } = {}) {
+    const sql = isAdmin
+      ? `SELECT video_id, title, channel, download_path, downloaded_at, views, quality, status FROM videos WHERE downloaded = 1 ORDER BY downloaded_at DESC`
+      : `SELECT video_id, title, channel, download_path, downloaded_at, views, quality, status FROM videos WHERE downloaded = 1 AND owner_user_id = ? ORDER BY downloaded_at DESC`;
+    const stmt = db.prepare(sql);
+    return isAdmin ? stmt.all() : stmt.all(owner_user_id);
   }
 
   /**
@@ -119,19 +117,24 @@ class VideoModel {
   /**
    * Получить статистику
    */
-  static getStats() {
-    const stmt = db.prepare(`
-      SELECT 
-        COUNT(*) as total,
-        SUM(CASE WHEN downloaded = 1 THEN 1 ELSE 0 END) as downloaded,
-        SUM(CASE WHEN processed = 1 THEN 1 ELSE 0 END) as processed,
-        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
-        SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active,
-        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed
-      FROM videos
-    `);
-
-    return stmt.get();
+  static getStats({ owner_user_id = null, isAdmin = false } = {}) {
+    const sql = isAdmin
+      ? `SELECT COUNT(*) as total,
+                 SUM(CASE WHEN downloaded = 1 THEN 1 ELSE 0 END) as downloaded,
+                 SUM(CASE WHEN processed = 1 THEN 1 ELSE 0 END) as processed,
+                 SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+                 SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active,
+                 SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed
+         FROM videos`
+      : `SELECT COUNT(*) as total,
+                 SUM(CASE WHEN downloaded = 1 THEN 1 ELSE 0 END) as downloaded,
+                 SUM(CASE WHEN processed = 1 THEN 1 ELSE 0 END) as processed,
+                 SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+                 SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active,
+                 SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed
+         FROM videos WHERE owner_user_id = ?`;
+    const stmt = db.prepare(sql);
+    return isAdmin ? stmt.get() : stmt.get(owner_user_id);
   }
 }
 

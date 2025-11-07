@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { google } from 'googleapis';
 import aiVideoService from '../services/aiVideoService.js';
+import { authenticateToken, requireApproved } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -12,7 +13,7 @@ const router = express.Router();
  * POST /api/generator/translate
  * Запустить процесс генерации видео с переводом
  */
-router.post('/translate', async (req, res) => {
+router.post('/translate', authenticateToken, requireApproved, async (req, res) => {
   try {
     const { videoId, targetLanguages } = req.body;
     
@@ -211,7 +212,7 @@ router.get('/sheets', async (req, res) => {
  * POST /api/generator/ai/generate
  * Body: { prompt: string, options?: { duration?: number, aspect?: string, provider?: string } }
  */
-router.post('/ai/generate', async (req, res) => {
+router.post('/ai/generate', authenticateToken, requireApproved, async (req, res) => {
   try {
     const prompt = String(req.body?.prompt || '').trim();
     const options = req.body?.options || {};
@@ -223,7 +224,9 @@ router.post('/ai/generate', async (req, res) => {
     if (!prompt || prompt.length < 5) {
       return res.status(400).json({ success: false, error: 'prompt обязателен' });
     }
-    const job = await aiVideoService.addGenerateJob(prompt, options, meta);
+  const job = await aiVideoService.addGenerateJob(prompt, options, meta);
+  // Записываем задачу в SQLite с привязкой владельца
+  AITaskSQLite.create({ jobId: job.jobId, prompt, provider: options.provider || 'stub', options, spreadsheetId: meta.spreadsheetId, sheet: meta.sheet, rowIndex: meta.rowIndex, status: 'pending', ownerUserId: req.user.id });
     res.json({ success: true, ...job });
   } catch (error) {
     console.error('❌ Ошибка запуска AI генерации:', error);
@@ -234,7 +237,7 @@ router.post('/ai/generate', async (req, res) => {
 /**
  * GET /api/generator/ai/status/:jobId
  */
-router.get('/ai/status/:jobId', async (req, res) => {
+router.get('/ai/status/:jobId', authenticateToken, requireApproved, async (req, res) => {
   try {
     const s = await aiVideoService.getJobStatus(req.params.jobId);
     if (!s) return res.status(404).json({ success: false, error: 'job not found' });
@@ -247,13 +250,14 @@ router.get('/ai/status/:jobId', async (req, res) => {
 
 // История/поиск задач AI
 import AITaskSQLite from '../models/AITaskSQLite.js';
-router.get('/ai/tasks', (req, res) => {
+router.get('/ai/tasks', authenticateToken, requireApproved, (req, res) => {
   try {
     const { q = '', status = '', provider = '', limit = '50', page = '1' } = req.query;
     const lim = Math.min(100, Math.max(1, parseInt(String(limit), 10)));
     const pg = Math.max(1, parseInt(String(page), 10));
     const offset = (pg - 1) * lim;
-    const list = AITaskSQLite.search({ q: String(q), status: status || null, provider: provider || null, limit: lim, offset });
+    const isAdmin = req.user.role === 'admin';
+    const list = AITaskSQLite.search({ q: String(q), status: status || null, provider: provider || null, limit: lim, offset, owner_user_id: req.user.id, isAdmin });
     res.json({ success: true, data: list, page: pg, limit: lim });
   } catch (error) {
     console.error('❌ Ошибка списка AI задач:', error);
@@ -262,11 +266,15 @@ router.get('/ai/tasks', (req, res) => {
 });
 
 // Повтор задачи по jobId
-router.post('/ai/retry/:jobId', async (req, res) => {
+router.post('/ai/retry/:jobId', authenticateToken, requireApproved, async (req, res) => {
   try {
     const jobId = String(req.params.jobId);
     const rec = AITaskSQLite.findByJobId(jobId);
     if (!rec) return res.status(404).json({ success: false, error: 'task not found' });
+    // Проверка владения если не админ
+    if (req.user.role !== 'admin' && rec.owner_user_id !== req.user.id) {
+      return res.status(403).json({ success: false, error: 'Недостаточно прав на повтор задачи' });
+    }
     const options = rec.options ? JSON.parse(rec.options) : {};
     const resp = await aiVideoService.addGenerateJob(rec.prompt, options);
     res.json({ success: true, ...resp });
@@ -279,7 +287,7 @@ router.post('/ai/retry/:jobId', async (req, res) => {
 /**
  * GET /api/generator/ai/download/:jobId
  */
-router.get('/ai/download/:jobId', async (req, res) => {
+router.get('/ai/download/:jobId', authenticateToken, requireApproved, async (req, res) => {
   try {
     const s = await aiVideoService.getJobStatus(req.params.jobId);
     if (!s || s.status !== 'completed' || !s.result?.filePath) {

@@ -5,6 +5,8 @@ import path from 'path';
 import https from 'https';
 import http from 'http';
 import { URL } from 'url';
+import { authenticateToken, requireApproved } from '../middleware/auth.js';
+import UserMetricsSQLite from '../models/UserMetricsSQLite.js';
 
 const router = express.Router();
 
@@ -12,7 +14,7 @@ const router = express.Router();
  * POST /api/videos/download
  * Добавить видео в очередь скачивания
  */
-router.post('/download', async (req, res) => {
+router.post('/download', authenticateToken, requireApproved, async (req, res) => {
   try {
     const { videoId, quality = 'highest' } = req.body;
     
@@ -46,7 +48,11 @@ router.post('/download', async (req, res) => {
       quality,
       status: 'pending',
       jobId: job.jobId,
+      ownerUserId: req.user.id
     });
+
+    // инкремент метрики пользователю
+    try { if (req.user?.id) UserMetricsSQLite.inc(req.user.id, 'videos_downloaded', 1); } catch {}
 
     res.json({
       success: true,
@@ -66,7 +72,7 @@ router.post('/download', async (req, res) => {
  * POST /api/videos/parse
  * Добавить видео в очередь парсинга
  */
-router.post('/parse', async (req, res) => {
+router.post('/parse', authenticateToken, requireApproved, async (req, res) => {
   try {
     const { videoId, languages, spreadsheetId } = req.body;
     
@@ -82,6 +88,8 @@ router.post('/parse', async (req, res) => {
       languages: languages || ['en', 'ru'],
       spreadsheetId,
     });
+
+    try { if (req.user?.id) UserMetricsSQLite.inc(req.user.id, 'videos_parsed', 1); } catch {}
 
     res.json({
       success: true,
@@ -154,7 +162,7 @@ router.get('/queue', async (req, res) => {
  * POST /api/videos/retry/:jobId
  * Повторить неудачную задачу
  */
-router.post('/retry/:jobId', async (req, res) => {
+router.post('/retry/:jobId', authenticateToken, requireApproved, async (req, res) => {
   try {
     const { queueType = 'download' } = req.body;
     const { default: videoDownloadService } = await import('../services/videoDownloadService.js');
@@ -178,7 +186,7 @@ router.post('/retry/:jobId', async (req, res) => {
  * DELETE /api/videos/:jobId
  * Удалить задачу
  */
-router.delete('/:jobId', async (req, res) => {
+router.delete('/:jobId', authenticateToken, requireApproved, async (req, res) => {
   try {
     const { queueType = 'download' } = req.query;
     const { default: videoDownloadService } = await import('../services/videoDownloadService.js');
@@ -202,22 +210,14 @@ router.delete('/:jobId', async (req, res) => {
  * GET /api/videos/downloaded
  * Получить список скачанных видео из БД
  */
-router.get('/downloaded', async (req, res) => {
+router.get('/downloaded', authenticateToken, requireApproved, async (req, res) => {
   try {
-    const videos = VideoSQLite.findAll();
-    const downloaded = videos.filter(v => v.downloaded);
-    
-    res.json({
-      success: true,
-      count: downloaded.length,
-      data: downloaded
-    });
+    const isAdmin = req.user.role === 'admin';
+    const downloaded = VideoSQLite.findDownloaded({ owner_user_id: req.user.id, isAdmin });
+    res.json({ success: true, count: downloaded.length, data: downloaded });
   } catch (error) {
     console.error('❌ Ошибка при получении списка видео:', error);
-    res.status(500).json({ 
-      success: false,
-      error: error.message 
-    });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -262,22 +262,17 @@ router.get('/download/file', async (req, res) => {
  * GET /api/videos/stats
  * Получить статистику очереди
  */
-router.get('/stats', async (req, res) => {
+router.get('/stats', authenticateToken, requireApproved, async (req, res) => {
   try {
-    const { queueType = 'download' } = req.query;
+    // очередь статусов оставляем глобальной, но добавим пользовательскую статистику
     const { default: videoDownloadService } = await import('../services/videoDownloadService.js');
-    const stats = await videoDownloadService.getQueueStats(queueType);
-
-    res.json({
-      success: true,
-      data: stats
-    });
+    const queueStats = await videoDownloadService.getQueueStats('download');
+    const isAdmin = req.user.role === 'admin';
+    const videoStats = VideoSQLite.getStats({ owner_user_id: req.user.id, isAdmin });
+    res.json({ success: true, data: { queue: queueStats, videos: videoStats } });
   } catch (error) {
     console.error('❌ Ошибка при получении статистики:', error);
-    res.status(500).json({ 
-      success: false,
-      error: error.message 
-    });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 

@@ -21,13 +21,14 @@ import {
   TeamOutlined,
   ClockCircleOutlined,
   SafetyOutlined,
-  EditOutlined
+  EditOutlined,
+  LoginOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
 import useAuthStore from '../stores/authStore';
 
 const { Option } = Select;
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 const UsersManagementPage = () => {
   const [users, setUsers] = useState([]);
@@ -37,19 +38,19 @@ const UsersManagementPage = () => {
   const [roleModalVisible, setRoleModalVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [newRole, setNewRole] = useState('user');
-  const { token } = useAuthStore();
+  const { token, impersonate } = useAuthStore();
 
   const fetchData = async () => {
     setLoading(true);
     try {
       const [usersRes, pendingRes, statsRes] = await Promise.all([
-        axios.get(`${API_URL}/api/auth/users`, {
+        axios.get(`${API_URL}/auth/users`, {
           headers: { Authorization: `Bearer ${token}` }
         }),
-        axios.get(`${API_URL}/api/auth/pending-users`, {
+        axios.get(`${API_URL}/auth/pending-users`, {
           headers: { Authorization: `Bearer ${token}` }
         }),
-        axios.get(`${API_URL}/api/auth/stats`, {
+        axios.get(`${API_URL}/auth/stats`, {
           headers: { Authorization: `Bearer ${token}` }
         })
       ]);
@@ -72,7 +73,7 @@ const UsersManagementPage = () => {
   const handleApprove = async (userId) => {
     try {
       const response = await axios.post(
-        `${API_URL}/api/auth/approve/${userId}`,
+        `${API_URL}/auth/approve/${userId}`,
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -90,7 +91,7 @@ const UsersManagementPage = () => {
   const handleReject = async (userId) => {
     try {
       const response = await axios.post(
-        `${API_URL}/api/auth/reject/${userId}`,
+        `${API_URL}/auth/reject/${userId}`,
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -110,7 +111,7 @@ const UsersManagementPage = () => {
 
     try {
       const response = await axios.post(
-        `${API_URL}/api/auth/change-role/${selectedUser.id}`,
+        `${API_URL}/auth/change-role/${selectedUser.id}`,
         { role: newRole },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -232,13 +233,29 @@ const UsersManagementPage = () => {
       title: 'Действия',
       key: 'actions',
       render: (_, record) => (
-        <Button 
-          icon={<EditOutlined />} 
-          size="small"
-          onClick={() => openRoleModal(record)}
-        >
-          Изменить роль
-        </Button>
+        <Space>
+          <Button 
+            icon={<EditOutlined />} 
+            size="small"
+            onClick={() => openRoleModal(record)}
+          >
+            Роль
+          </Button>
+          <Button 
+            icon={<LoginOutlined />} 
+            size="small"
+            onClick={async () => {
+              const res = await impersonate(record.id);
+              if (res.success) {
+                message.success(`Вы вошли как ${record.first_name || record.username || record.login || record.id}`);
+              } else {
+                message.error(res.error || 'Не удалось войти как пользователь');
+              }
+            }}
+          >
+            Войти как
+          </Button>
+        </Space>
       )
     }
   ];

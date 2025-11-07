@@ -8,14 +8,20 @@ const api = axios.create({
   },
 });
 
-// Request interceptor
+// Request interceptor: attach auth token if present in persisted store
 api.interceptors.request.use(
   (config) => {
-    // Можно добавить токен авторизации здесь
-    // const token = localStorage.getItem('token');
-    // if (token) {
-    //   config.headers.Authorization = `Bearer ${token}`;
-    // }
+    try {
+      const raw = localStorage.getItem('auth-storage');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const token = parsed?.state?.token || parsed?.token;
+        if (token) {
+          config.headers = config.headers || {};
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      }
+    } catch {}
     return config;
   },
   (error) => {

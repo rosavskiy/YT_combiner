@@ -13,6 +13,8 @@ import GeneratorPage from './pages/GeneratorPage';
 import SettingsPage from './pages/SettingsPage';
 import AITasksPage from './pages/AITasksPage';
 import UsersManagementPage from './pages/UsersManagementPage';
+import ReportsPage from './pages/ReportsPage';
+import EmployeePage from './pages/EmployeePage';
 import { useSocketStore } from './stores/socketStore';
 import useAuthStore from './stores/authStore';
 
@@ -62,6 +64,7 @@ function App() {
               {/* Защищенные маршруты */}
               <Route path="/" element={<ProtectedLayout><Dashboard /></ProtectedLayout>} />
               <Route path="/trends" element={<ProtectedLayout><TrendsPage /></ProtectedLayout>} />
+              <Route path="/employee" element={<ProtectedLayout><EmployeePage /></ProtectedLayout>} />
               <Route path="/topics" element={<ProtectedLayout><TopicsPage /></ProtectedLayout>} />
               <Route path="/tracking" element={<ProtectedLayout><TrackingPage /></ProtectedLayout>} />
               <Route path="/download" element={<ProtectedLayout><DownloadPage /></ProtectedLayout>} />
@@ -71,6 +74,7 @@ function App() {
               
               {/* Админ маршруты */}
               <Route path="/users" element={<ProtectedLayout requireAdmin><UsersManagementPage /></ProtectedLayout>} />
+              <Route path="/reports" element={<ProtectedLayout requireAdmin><ReportsPage /></ProtectedLayout>} />
 
               {/* Редирект на главную для неизвестных маршрутов */}
               <Route path="*" element={<Navigate to="/login" replace />} />

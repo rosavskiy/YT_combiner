@@ -180,13 +180,14 @@ class UserSQLite {
   /**
    * Генерировать JWT токен для пользователя
    */
-  static generateToken(user) {
+  static generateToken(user, extraClaims = {}) {
     const payload = {
       id: user.id,
       telegram_id: user.telegram_id,
       username: user.username,
       role: user.role,
-      is_approved: user.is_approved
+      is_approved: user.is_approved,
+      ...extraClaims
     };
 
     return jwt.sign(payload, process.env.JWT_SECRET || 'your-secret-key', {

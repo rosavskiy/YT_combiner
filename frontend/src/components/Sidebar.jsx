@@ -1,5 +1,5 @@
 import React from 'react';
-import { Layout, Menu, Avatar, Dropdown, Space } from 'antd';
+import { Layout, Menu, Avatar, Dropdown, Space, Tag, Button } from 'antd';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   DashboardOutlined,
@@ -12,7 +12,9 @@ import {
   EyeOutlined,
   TeamOutlined,
   UserOutlined,
-  LogoutOutlined
+  LogoutOutlined,
+  ClockCircleOutlined,
+  BarChartOutlined
 } from '@ant-design/icons';
 import useAuthStore from '../stores/authStore';
 
@@ -21,7 +23,7 @@ const { Sider } = Layout;
 const Sidebar = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout, isAdmin } = useAuthStore();
+  const { user, logout, isAdmin, impersonating, revertImpersonation } = useAuthStore();
 
   const handleLogout = () => {
     logout();
@@ -34,6 +36,12 @@ const Sidebar = () => {
       icon: <UserOutlined />,
       label: 'Профиль',
     },
+    ...(impersonating ? [{
+      key: 'revert',
+      icon: <LogoutOutlined />,
+      label: 'Вернуться к администратору',
+      onClick: () => revertImpersonation()
+    }] : []),
     {
       key: 'logout',
       icon: <LogoutOutlined />,
@@ -48,6 +56,11 @@ const Sidebar = () => {
       key: '/',
       icon: <DashboardOutlined />,
       label: 'Дашборд',
+    },
+    {
+      key: '/employee',
+      icon: <ClockCircleOutlined />,
+      label: 'Рабочее время',
     },
     {
       key: '/trends',
@@ -92,6 +105,11 @@ const Sidebar = () => {
       key: '/users',
       icon: <TeamOutlined />,
       label: 'Пользователи',
+    });
+    menuItems.push({
+      key: '/reports',
+      icon: <BarChartOutlined />,
+      label: 'Отчеты',
     });
   }
 
@@ -161,6 +179,7 @@ const Sidebar = () => {
               }}>
                 {user.first_name}
               </div>
+              {impersonating && <Tag color="gold" style={{ marginInlineStart: 'auto' }}>Имперсонация</Tag>}
             </Space>
           </Dropdown>
         </div>

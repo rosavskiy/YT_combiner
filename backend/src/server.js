@@ -19,6 +19,8 @@ import topicsRouter from './routes/topics.js';
 import systemRouter from './routes/system.js';
 import channelsRouter from './routes/channels.js';
 import authRouter from './routes/auth.js';
+import worktimeRouter from './routes/worktime.js';
+import userRouter from './routes/user.js';
 
 // Config
 // MongoDB отключен по умолчанию (используем SQLite)
@@ -112,6 +114,8 @@ app.get('/health', (req, res) => {
 
 // API Routes
 app.use('/api/auth', authRouter);
+app.use('/api/worktime', worktimeRouter);
+app.use('/api/user', userRouter);
 app.use('/api/trends', trendsRouter);
 app.use('/api/videos', videosRouter);
 app.use('/api/generator', generatorRouter);

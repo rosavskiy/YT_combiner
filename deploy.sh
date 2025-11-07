@@ -49,8 +49,14 @@ pip3 install -r requirements.txt
 # 5. Database migration (if needed)
 echo -e "${YELLOW}🗄️  Checking database...${NC}"
 cd $BACKEND_DIR
-if [ -f "scripts/migrate.js" ]; then
-    node scripts/migrate.js
+# Выполним миграции схемы владения и присвоения владельцев
+if [ -f "scripts/migrate-add-ownership.js" ]; then
+    echo -e "${YELLOW}➡️  Running migrate-add-ownership.js${NC}"
+    node scripts/migrate-add-ownership.js || true
+fi
+if [ -f "scripts/migrate-assign-owners.js" ]; then
+    echo -e "${YELLOW}➡️  Running migrate-assign-owners.js${NC}"
+    node scripts/migrate-assign-owners.js || true
 fi
 
 # 6. Restart services

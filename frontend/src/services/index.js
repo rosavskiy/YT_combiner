@@ -35,6 +35,11 @@ export const videosService = {
   
   // Получить список скачанных видео
   getDownloadedVideos: () => api.get('/videos/downloaded'),
+  // Парсить видео
+  parseVideo: (videoId, { languages = ['en','ru'], spreadsheetId } = {}) =>
+    api.post('/videos/parse', { videoId, languages, spreadsheetId }),
+  // Статус задачи (универсальный)
+  jobStatus: (jobId, queueType = 'download') => api.get(`/videos/status/${jobId}`, { params: { queueType } }),
 };
 
 export const generatorService = {
@@ -76,6 +81,13 @@ export const configService = {
   saveTrackedCountries: (payload) => api.put('/config/tracked-countries', payload),
 };
 
+export const worktimeService = {
+  start: () => api.post('/worktime/start'),
+  stop: () => api.post('/worktime/stop'),
+  active: () => api.get('/worktime/active'),
+  summary: (params = {}) => api.get('/worktime/summary', { params }),
+};
+
 export const topicsService = {
   // Получить все категории тем
   getTopics: () => api.get('/topics'),
@@ -107,4 +119,5 @@ export default {
   generator: generatorService,
   config: configService,
   topics: topicsService,
+  worktime: worktimeService,
 };

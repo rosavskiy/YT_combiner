@@ -1,5 +1,6 @@
 import express from 'express';
 import ChannelModel from '../models/ChannelSQLite.js';
+import { authenticateToken, requireApproved } from '../middleware/auth.js';
 import { resolveChannel, fetchLatestActivities } from '../services/youtubeChannelService.js';
 
 const router = express.Router();
@@ -9,20 +10,21 @@ function getApiKey() {
 }
 
 // GET /api/channels - list channels
-router.get('/', (req, res) => {
-  const items = ChannelModel.all();
+router.get('/', authenticateToken, requireApproved, (req, res) => {
+  const isAdmin = req.user.role === 'admin';
+  const items = ChannelModel.all({ owner_user_id: req.user.id, isAdmin });
   res.json({ success: true, data: items });
 });
 
 // POST /api/channels - add by url/input
-router.post('/', async (req, res) => {
+router.post('/', authenticateToken, requireApproved, async (req, res) => {
   try {
     const { url } = req.body || {};
     if (!url) return res.status(400).json({ success: false, error: 'Требуется ссылка или идентификатор канала' });
     const apiKey = getApiKey();
     if (!apiKey) return res.status(400).json({ success: false, error: 'На сервере не настроен YOUTUBE_API_KEY' });
     const info = await resolveChannel(url, apiKey);
-    ChannelModel.upsert({ channel_id: info.channelId, title: info.title, url });
+    ChannelModel.upsert({ channel_id: info.channelId, title: info.title, url, owner_user_id: req.user.id });
     res.json({ success: true, channel: info });
   } catch (e) {
     res.status(400).json({ success: false, error: e.message || 'Не удалось добавить канал' });
@@ -30,17 +32,17 @@ router.post('/', async (req, res) => {
 });
 
 // DELETE /api/channels/:id - remove channel
-router.delete('/:id', (req, res) => {
+router.delete('/:id', authenticateToken, requireApproved, (req, res) => {
   const { id } = req.params;
   if (!id) return res.status(400).json({ success: false, error: 'Не указан channelId' });
-  ChannelModel.remove(id);
+  ChannelModel.remove(id, { owner_user_id: req.user.id, isAdmin: req.user.role === 'admin' });
   res.json({ success: true });
 });
 
 // GET /api/channels/activities?limit=10 - latest activities across channels
-router.get('/activities', async (req, res) => {
+router.get('/activities', authenticateToken, requireApproved, async (req, res) => {
   const limit = Math.min(50, parseInt(req.query.limit || '10', 10));
-  const items = ChannelModel.all();
+  const items = ChannelModel.all({ owner_user_id: req.user.id, isAdmin: req.user.role === 'admin' });
   if (!items.length) return res.json({ success: true, data: [] });
   const apiKey = getApiKey();
   if (!apiKey) return res.status(400).json({ success: false, error: 'На сервере не настроен YOUTUBE_API_KEY' });
@@ -53,9 +55,9 @@ router.get('/activities', async (req, res) => {
 });
 
 // POST /api/channels/refresh - alias to activities
-router.post('/refresh', async (req, res) => {
+router.post('/refresh', authenticateToken, requireApproved, async (req, res) => {
   const limit = Math.min(50, parseInt(req.body?.limit || '10', 10));
-  const items = ChannelModel.all();
+  const items = ChannelModel.all({ owner_user_id: req.user.id, isAdmin: req.user.role === 'admin' });
   const apiKey = getApiKey();
   if (!apiKey) return res.status(400).json({ success: false, error: 'На сервере не настроен YOUTUBE_API_KEY' });
   try {

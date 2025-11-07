@@ -106,6 +106,9 @@ const LoginPage = () => {
               type="warning"
               showIcon
             />
+            <Button type="default" onClick={() => { useAuthStore.getState().logout(); navigate('/login'); }}>
+              Выйти и войти другим пользователем
+            </Button>
           </Space>
         </Card>
       </div>
@@ -120,7 +123,12 @@ const LoginPage = () => {
       justifyContent: 'center',
       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
     }}>
-      <Card style={{ maxWidth: 520, width: '90%' }}>
+      <Card style={{ maxWidth: 520, width: '90%', position: 'relative' }}>
+        <Button 
+          type="link" 
+          style={{ position: 'absolute', top: 8, left: 8, padding: 0 }}
+          onClick={() => navigate('/')}
+        >← Назад</Button>
         <Space direction="vertical" size="large" style={{ width: '100%', textAlign: 'center' }}>
           <div>
             <Title level={2} style={{ margin: 0 }}>Вход в систему</Title>

@@ -77,7 +77,7 @@ router.post('/telegram', authLimiter, async (req, res) => {
     }
 
     // Создаем или обновляем пользователя
-    const user = UserSQLite.createOrUpdate({
+    const user = await UserSQLite.createOrUpdate({
       id: telegramData.id,
       username: telegramData.username,
       first_name: telegramData.first_name,
@@ -343,3 +343,42 @@ router.get('/stats', authenticateToken, requireAdmin, (req, res) => {
 });
 
 export default router;
+/**
+ * Имперсонация: админ получает токен, действующий как другой пользователь
+ * POST /api/auth/impersonate/:id
+ */
+router.post('/impersonate/:id', authenticateToken, requireAdmin, (req, res) => {
+  try {
+    const targetId = parseInt(req.params.id, 10);
+    if (isNaN(targetId)) return res.status(400).json({ success:false, error:'Неверный ID пользователя'});
+    const target = UserSQLite.findById(targetId);
+    if (!target) return res.status(404).json({ success:false, error:'Пользователь не найден'});
+    // Генерируем токен с меткой impersonated_by
+    const token = UserSQLite.generateToken(target, { impersonated_by: req.user.id });
+    res.json({ success:true, data:{ token, user: UserSQLite.sanitize(target), impersonated:true } });
+  } catch (e) {
+    res.status(500).json({ success:false, error:e.message });
+  }
+});
+
+/**
+ * Revert impersonation: просто выдаем новый токен админа без impersonated_by
+ * POST /api/auth/revert-impersonation
+ */
+router.post('/revert-impersonation', authenticateToken, (req, res) => {
+  try {
+    // Если не имперсонация — для админа вернуть текущий токен, остальным запретить
+    if (!req.user._impersonated) {
+      if (req.user.role === 'admin') {
+        return res.json({ success:true, data:{ token: req.headers['authorization']?.split(' ')[1], user: req.user, impersonated:false } });
+      }
+      return res.status(403).json({ success:false, error:'Недостаточно прав' });
+    }
+    const adminUser = UserSQLite.findById(req.user._impersonated_by);
+    if (!adminUser) return res.status(404).json({ success:false, error:'Исходный админ не найден' });
+    const token = UserSQLite.generateToken(adminUser);
+    res.json({ success:true, data:{ token, user: UserSQLite.sanitize(adminUser), impersonated:false } });
+  } catch (e) {
+    res.status(500).json({ success:false, error:e.message });
+  }
+});

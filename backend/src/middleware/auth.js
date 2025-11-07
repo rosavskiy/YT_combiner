@@ -34,8 +34,14 @@ export const authenticateToken = (req, res, next) => {
       });
     }
 
-    // Добавляем данные пользователя в request
-    req.user = UserSQLite.sanitize(user);
+    // Имперсонация: если токен содержит impersonated_by -> добавляем метаданные
+    const sanitized = UserSQLite.sanitize(user);
+    if (decoded.impersonated_by) {
+      sanitized._impersonated = true;
+      sanitized._impersonated_by = decoded.impersonated_by;
+    }
+    req.user = sanitized;
+    req.authPayload = decoded; // сохраняем исходный payload для revert
     next();
   } catch (error) {
     return res.status(403).json({ 

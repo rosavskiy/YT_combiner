@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 const useAuthStore = create(
   persist(
@@ -14,6 +14,8 @@ const useAuthStore = create(
       isLoading: false,
       error: null,
       requiresApproval: false,
+  impersonating: false,
+  originalToken: null,
 
       // Actions
       login: async (credentials, method = 'telegram') => {
@@ -96,6 +98,56 @@ const useAuthStore = create(
         }
       },
 
+      // Имперсонация админа под другим пользователем
+      impersonate: async (userId) => {
+        const { token } = get();
+        if (!token) return { success: false, error: 'Нет токена' };
+        try {
+          const resp = await axios.post(`${API_URL}/auth/impersonate/${userId}`, {}, { headers: { Authorization: `Bearer ${token}` } });
+          if (resp.data?.success) {
+            const { token: newToken, user } = resp.data.data;
+            set({
+              originalToken: token,
+              token: newToken,
+              user,
+              impersonating: true,
+              isAuthenticated: true,
+              requiresApproval: !user.is_approved,
+            });
+            axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
+            return { success: true };
+          }
+          return { success: false, error: resp.data?.error || 'Не удалось имперсонировать' };
+        } catch (e) {
+          return { success: false, error: e.response?.data?.error || e.message };
+        }
+      },
+
+      revertImpersonation: async () => {
+        const { token, originalToken } = get();
+        if (!token) return { success: false };
+        try {
+          const resp = await axios.post(`${API_URL}/auth/revert-impersonation`, {}, { headers: { Authorization: `Bearer ${token}` } });
+          if (resp.data?.success) {
+            const { token: adminToken, user } = resp.data.data;
+            const finalToken = adminToken || originalToken; // fallback
+            set({
+              token: finalToken,
+              originalToken: null,
+              user,
+              impersonating: false,
+              isAuthenticated: true,
+              requiresApproval: !user.is_approved,
+            });
+            axios.defaults.headers.common['Authorization'] = `Bearer ${finalToken}`;
+            return { success: true };
+          }
+          return { success: false };
+        } catch (e) {
+          return { success: false };
+        }
+      },
+
       setToken: (token) => {
         set({ token });
         if (token) {
@@ -123,7 +175,9 @@ const useAuthStore = create(
         user: state.user,
         token: state.token,
         isAuthenticated: state.isAuthenticated,
-        requiresApproval: state.requiresApproval
+        requiresApproval: state.requiresApproval,
+        impersonating: state.impersonating,
+        originalToken: state.originalToken
       }),
       onRehydrateStorage: () => (state) => {
         // Восстанавливаем токен в axios после загрузки из localStorage
