@@ -69,7 +69,23 @@ fi
 
 # 6. Restart services
 echo -e "${YELLOW}♻️  Restarting services...${NC}"
-pm2 restart ecosystem.config.js --update-env
+# Перезапуск выполняем из корня проекта, где лежит ecosystem.config.js
+cd $PROJECT_DIR
+# Если процессы ещё не запущены, стартуем их; иначе — перезапускаем с обновлением env
+PM2_CONFIG="$PROJECT_DIR/ecosystem.config.js"
+if pm2 describe yt-combiner-backend > /dev/null 2>&1; then
+    # Перезапускаем по именам, чтобы не зависеть от поиска файла конфигурации
+    pm2 restart yt-combiner-backend || { echo -e "${RED}Не удалось перезапустить yt-combiner-backend${NC}"; exit 1; }
+    pm2 restart yt-combiner-python || { echo -e "${RED}Не удалось перезапустить yt-combiner-python${NC}"; exit 1; }
+else
+    # Процессы ещё не существуют — стартуем из абсолютного пути
+    if [ -f "$PM2_CONFIG" ]; then
+        pm2 start "$PM2_CONFIG" || { echo -e "${RED}Не удалось стартовать через $PM2_CONFIG${NC}"; exit 1; }
+    else
+        echo -e "${RED}Файл конфигурации PM2 не найден: $PM2_CONFIG${NC}"; exit 1;
+    fi
+fi
+pm2 save
 
 # 7. Reload Nginx
 echo -e "${YELLOW}🌐 Reloading Nginx...${NC}"
