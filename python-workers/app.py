@@ -50,7 +50,12 @@ try:
 
     if __name__ == '__main__':
         port = int(os.getenv('PYTHON_WORKER_PORT', 5000))
-        app.run(host='0.0.0.0', port=port, debug=True)
+        # В продакшене отключаем debug. Включить можно переменной PYTHON_WORKER_DEBUG=1
+        is_debug = (
+            str(os.getenv('PYTHON_WORKER_DEBUG', '0')).lower() in ('1', 'true', 'yes') or
+            str(os.getenv('FLASK_ENV', '')).lower().startswith('dev')
+        )
+        app.run(host='0.0.0.0', port=port, debug=is_debug)
         
 except ImportError as e:
     print("⚠️  Python зависимости не установлены")
