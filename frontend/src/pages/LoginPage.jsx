@@ -12,6 +12,7 @@ const LoginPage = () => {
   const [loginForm] = Form.useForm();
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState(null);
+  const [activeTab, setActiveTab] = useState('password'); // отслеживаем активную вкладку
 
   useEffect(() => {
     // Если пользователь уже авторизован и подтвержден, перенаправляем на главную
@@ -45,43 +46,42 @@ const LoginPage = () => {
     }
   };
 
+  // Встраиваем Telegram widget ТОЛЬКО когда активна вкладка "telegram" и контейнер уже присутствует в DOM
   useEffect(() => {
-    // Добавляем скрипт Telegram Login Widget
+    if (activeTab !== 'telegram') return;
+    const container = document.getElementById('telegram-login-container');
+    if (!container) return; // контейнер еще не смонтирован
+
+    // Очищаем контейнер (на случай повторного открытия вкладки)
+    container.innerHTML = '';
+
     const script = document.createElement('script');
     script.src = 'https://telegram.org/js/telegram-widget.js?22';
-    script.setAttribute('data-telegram-login', import.meta.env.VITE_TELEGRAM_BOT_USERNAME || 'YourBotUsername');
+    script.setAttribute('data-telegram-login', import.meta.env.VITE_TELEGRAM_BOT_NAME || 'yt_zavod_auth_bot');
     script.setAttribute('data-size', 'large');
     script.setAttribute('data-radius', '8');
-    script.setAttribute('data-auth-url', window.location.origin + '/telegram-callback');
+    script.setAttribute('data-lang', 'ru');
+    script.setAttribute('data-onauth', 'onTelegramAuth(user)'); // callback
     script.setAttribute('data-request-access', 'write');
     script.async = true;
 
     // Глобальная функция для обработки авторизации
-    window.onTelegramAuth = async (user) => {
-      console.log('Telegram auth:', user);
-      const result = await login(user, 'telegram');
-      
-      if (result.success) {
-        if (result.requiresApproval) {
-          // Пользователь ожидает подтверждения
-          console.log('Awaiting approval');
-        } else {
-          // Успешная авторизация
+    window.onTelegramAuth = async (tgUser) => {
+      try {
+        const result = await login(tgUser, 'telegram');
+        if (result.success && !result.requiresApproval) {
           navigate('/');
         }
+      } catch (e) {
+        console.error('Telegram auth error:', e);
       }
     };
 
-    const container = document.getElementById('telegram-login-container');
-    if (container) {
-      container.innerHTML = '';
-      container.appendChild(script);
-    }
-
+    container.appendChild(script);
     return () => {
       delete window.onTelegramAuth;
     };
-  }, [login, navigate]);
+  }, [activeTab, login, navigate]);
 
   if (isAuthenticated && requiresApproval) {
     return (
@@ -134,7 +134,8 @@ const LoginPage = () => {
           </div>
 
           <Tabs 
-            defaultActiveKey="password" 
+            activeKey={activeTab}
+            onChange={setActiveTab}
             centered
             items={[
               {
