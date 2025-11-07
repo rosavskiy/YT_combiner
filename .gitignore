@@ -72,3 +72,9 @@ dump.rdb
 
 # Secrets (explicit)
 python-workers/google-credentials.json
+
+# SQLite databases (do NOT commit DB from servers)
+backend/data/*.db
+backend/data/*.db-shm
+backend/data/*.db-wal
+backend/data/*.sqlite

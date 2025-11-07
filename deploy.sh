@@ -42,9 +42,17 @@ npm install
 npm run build
 
 # 4. Python workers
-echo -e "${YELLOW}🐍 Setting up Python workers...${NC}"
+echo -e "${YELLOW}🐍 Setting up Python workers (venv)...${NC}"
 cd $PYTHON_DIR
-pip3 install -r requirements.txt
+# Create venv if missing
+if [ ! -d "venv" ]; then
+    python3 -m venv venv
+fi
+# Install deps into venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+deactivate
 
 # 5. Database migration (if needed)
 echo -e "${YELLOW}🗄️  Checking database...${NC}"

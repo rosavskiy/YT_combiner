@@ -21,7 +21,9 @@ module.exports = {
     {
       name: 'yt-combiner-python',
       script: './app.py',
-      interpreter: './venv/bin/python',
+      // Используем абсолютный путь к python из venv на сервере VPS
+      // Если путь другой — обновите ниже или задайте через PM2: --interpreter /abs/path/python
+      interpreter: '/var/www/yt-combiner/python-workers/venv/bin/python',
       cwd: './python-workers',
       instances: 1,
       autorestart: true,
