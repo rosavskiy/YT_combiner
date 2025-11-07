@@ -36,9 +36,10 @@ try:
         Генерация видео с переводом
         TODO: Реализовать интеграцию с Whisper, MoviePy, gTTS
         """
-        data = request.json
-        video_id = data.get('videoId')
-        target_languages = data.get('targetLanguages', [])
+        # Безопасно читаем JSON (может быть None)
+        data = request.get_json(silent=True) or {}
+        video_id = str(data.get('videoId') or '')
+        target_languages = data.get('targetLanguages') or []
         
         return jsonify({
             'success': True,
