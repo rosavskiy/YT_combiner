@@ -3,6 +3,7 @@ import { Card, Form, Input, Button, Space, Typography, Divider, message, Alert, 
 import { SettingOutlined, SaveOutlined, KeyOutlined, LinkOutlined, GlobalOutlined } from '@ant-design/icons';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { configService, trendsService } from '../services';
+import useAuthStore from '../stores/authStore';
 import videosService from '../services/videosService';
 
 const { Title, Paragraph, Text } = Typography;
@@ -10,14 +11,36 @@ const { Title, Paragraph, Text } = Typography;
 const SettingsPage = () => {
   const [form] = Form.useForm();
   const [countriesForm] = Form.useForm();
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('youtube_api_key') || '');
-  const [spreadsheetId, setSpreadsheetId] = useState(() => localStorage.getItem('sheets_spreadsheet_id') || '');
+  const user = useAuthStore((s) => s.user);
 
+  // Helpers: namespace localStorage by user id
+  const nsKey = (base) => `yt_user_${user?.id || 'anon'}_${base}`;
+  const readLS = (base, def = '') => {
+    try { return localStorage.getItem(nsKey(base)) || def; } catch { return def; }
+  };
+  const writeLS = (base, val) => {
+    try {
+      if (val === undefined || val === null || val === '') localStorage.removeItem(nsKey(base));
+      else localStorage.setItem(nsKey(base), val);
+    } catch {}
+  };
+
+  const [apiKey, setApiKey] = useState(() => readLS('youtube_api_key', ''));
+  const [spreadsheetId, setSpreadsheetId] = useState(() => readLS('sheets_spreadsheet_id', ''));
+
+  // Dev server shared key (only in development) – fallback helper
   const { data: serverApiKey } = useQuery({
     queryKey: ['server-api-key'],
     queryFn: configService.getApiKey,
     retry: false,
     staleTime: Infinity,
+  });
+
+  // Per-user secrets from backend storage
+  const { data: userKeysResp, refetch: refetchUserKeys } = useQuery({
+    queryKey: ['user-keys', user?.id],
+    queryFn: configService.getUserKeys,
+    enabled: !!user?.id,
   });
 
   const { data: countriesResp } = useQuery({
@@ -39,36 +62,66 @@ const SettingsPage = () => {
     onError: (e) => message.error(e?.error || 'Не удалось сохранить настройки стран'),
   });
 
+  // Перенос из DB (user-keys) в локальное состояние при загрузке
   useEffect(() => {
-    if (serverApiKey?.apiKey && !apiKey) {
+    if (userKeysResp?.data) {
+      const { youtubeApiKey: k = '', spreadsheetId: s = '' } = userKeysResp.data;
+      // Сохраняем в localStorage namespace текущего пользователя для оффлайн-UX
+      writeLS('youtube_api_key', k || '');
+      writeLS('sheets_spreadsheet_id', s || '');
+      setApiKey(k || '');
+      setSpreadsheetId(s || '');
+      form.setFieldsValue({ apiKey: k || '', spreadsheetId: s || '' });
+    } else if (serverApiKey?.apiKey && !apiKey) {
+      // Fallback dev shared key (only when per-user нет и локально пусто)
       const key = serverApiKey.apiKey;
-      localStorage.setItem('youtube_api_key', key);
+      writeLS('youtube_api_key', key);
       setApiKey(key);
       form.setFieldsValue({ apiKey: key });
-      message.success('✅ API ключ автоматически загружен с сервера!');
+      message.success('✅ API ключ автоматически загружен с сервера (dev)!');
     }
-  }, [serverApiKey, apiKey, form]);
+  }, [userKeysResp, serverApiKey, apiKey, form]);
+
+  // При смене пользователя (включая имперсонацию) — перечитать локальные значения
+  useEffect(() => {
+    const k = readLS('youtube_api_key', '');
+    const s = readLS('sheets_spreadsheet_id', '');
+    setApiKey(k);
+    setSpreadsheetId(s);
+    form.setFieldsValue({ apiKey: k, spreadsheetId: s });
+  }, [user?.id]);
+
+  const saveUserKeysMutation = useMutation({
+    mutationFn: (payload) => configService.saveUserKeys(payload),
+    onSuccess: () => {
+      message.success('✅ Ключи сохранены на сервере');
+      refetchUserKeys();
+    },
+    onError: (e) => message.error(e?.response?.data?.error || 'Не удалось сохранить ключи'),
+  });
 
   const handleSave = (values) => {
-    localStorage.setItem('youtube_api_key', values.apiKey);
-    setApiKey(values.apiKey);
-    if (values.spreadsheetId) {
-      localStorage.setItem('sheets_spreadsheet_id', values.spreadsheetId);
-      setSpreadsheetId(values.spreadsheetId);
-    } else {
-      localStorage.removeItem('sheets_spreadsheet_id');
-      setSpreadsheetId('');
-    }
-    message.success('✅ Настройки сохранены!');
+    const payload = {
+      youtubeApiKey: values.apiKey || '',
+      spreadsheetId: values.spreadsheetId || '',
+    };
+    // Локально для UX
+    writeLS('youtube_api_key', payload.youtubeApiKey);
+    writeLS('sheets_spreadsheet_id', payload.spreadsheetId);
+    setApiKey(payload.youtubeApiKey);
+    setSpreadsheetId(payload.spreadsheetId);
+    saveUserKeysMutation.mutate(payload);
   };
 
   const handleClear = () => {
-    localStorage.removeItem('youtube_api_key');
+    writeLS('youtube_api_key', '');
+    writeLS('sheets_spreadsheet_id', '');
     setApiKey('');
-    localStorage.removeItem('sheets_spreadsheet_id');
     setSpreadsheetId('');
     form.resetFields();
-    message.info('🗑️ API ключ удален');
+    // Отправляем пустые строки, чтобы удалить на сервере
+    saveUserKeysMutation.mutate({ youtubeApiKey: '', spreadsheetId: '' });
+    message.info('🗑️ Ключи очищены');
   };
 
   const handleUpdateSheetsHeaders = async () => {
@@ -240,7 +293,7 @@ const SettingsPage = () => {
 
             <Form.Item>
               <Space>
-                <Button type="primary" htmlType="submit" icon={<SaveOutlined />} size="large">Сохранить</Button>
+                <Button type="primary" htmlType="submit" icon={<SaveOutlined />} size="large" loading={saveUserKeysMutation.isPending}>Сохранить</Button>
                 <Button onClick={handleClear} danger size="large">Очистить</Button>
                 <Button onClick={handleUpdateSheetsHeaders} size="large">Обновить заголовки Sheets</Button>
               </Space>

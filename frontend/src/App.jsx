@@ -14,6 +14,7 @@ import SettingsPage from './pages/SettingsPage';
 import AITasksPage from './pages/AITasksPage';
 import UsersManagementPage from './pages/UsersManagementPage';
 import ReportsPage from './pages/ReportsPage';
+import AdminUserKeysPage from './pages/AdminUserKeysPage';
 import EmployeePage from './pages/EmployeePage';
 import { useSocketStore } from './stores/socketStore';
 import useAuthStore from './stores/authStore';
@@ -75,6 +76,7 @@ function App() {
               {/* Админ маршруты */}
               <Route path="/users" element={<ProtectedLayout requireAdmin><UsersManagementPage /></ProtectedLayout>} />
               <Route path="/reports" element={<ProtectedLayout requireAdmin><ReportsPage /></ProtectedLayout>} />
+              <Route path="/admin/user-keys" element={<ProtectedLayout requireAdmin><AdminUserKeysPage /></ProtectedLayout>} />
 
               {/* Редирект на главную для неизвестных маршрутов */}
               <Route path="*" element={<Navigate to="/login" replace />} />

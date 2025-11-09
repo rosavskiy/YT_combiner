@@ -81,6 +81,13 @@ export const configService = {
   saveTrackedCountries: (payload) => api.put('/config/tracked-countries', payload),
   // Админ: обзор пользовательских настроек
   listUsersSettings: () => api.get('/config/users/settings'),
+  // Персональные секреты (YouTube API key + Spreadsheet ID)
+  getUserKeys: () => api.get('/config/user-keys'),
+  saveUserKeys: (payload) => api.put('/config/user-keys', payload),
+  // Admin: управление ключами пользователей
+  adminListUserKeys: () => api.get('/config/admin/user-keys'),
+  adminGetUserKeys: (userId) => api.get(`/config/admin/user-keys/${userId}`),
+  adminSaveUserKeys: (userId, payload) => api.put(`/config/admin/user-keys/${userId}`, payload),
 };
 
 export const worktimeService = {
