@@ -16,6 +16,7 @@ import {
   ClockCircleOutlined,
   BarChartOutlined
 } from '@ant-design/icons';
+import { KeyOutlined } from '@ant-design/icons';
 import useAuthStore from '../stores/authStore';
 
 const { Sider } = Layout;
@@ -110,6 +111,11 @@ const Sidebar = () => {
       key: '/reports',
       icon: <BarChartOutlined />,
       label: 'Отчеты',
+    });
+    menuItems.push({
+      key: '/admin/user-keys',
+      icon: <KeyOutlined />,
+      label: 'Ключи пользователей',
     });
   }
 
