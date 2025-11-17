@@ -41,6 +41,68 @@ function formatChannelsList(channels) {
   return text;
 }
 
+// Определение, похоже ли сообщение на ссылку на YouTube-канал
+function extractYoutubeChannelUrl(text) {
+  if (!text) return null;
+
+  const trimmed = text.trim();
+
+  // Вариант 1: чистый channelId вида UCxxxx
+  if (/^UC[0-9A-Za-z_-]{16,}$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  // Вариант 2: ссылка содержит @username или /channel/UC...
+  const urlMatch = trimmed.match(/https?:\/\/[^\s]+/);
+  if (!urlMatch) return null;
+
+  const url = urlMatch[0];
+
+  if (/youtube\.com\/(channel\/UC|@)/i.test(url)) {
+    return url;
+  }
+
+  return null;
+}
+
+// Универсальный обработчик добавления канала (по команде и по голой ссылке)
+async function handleAddChannel(user, chatId, url) {
+  const userYoutubeKey = UserSettingsSQLite.get(user.id, 'youtube_api_key', '');
+  const apiKey = userYoutubeKey || (user.role === 'admin' ? process.env.YOUTUBE_API_KEY : '');
+
+  if (!apiKey) {
+    await sendTelegramMessage(chatId, 
+      `❌ *Ошибка настроек*\n\nYouTube API ключ не настроен в вашем профиле. ` +
+      `Зайдите в раздел *Настройки → Ключи* и укажите ключ.`
+    );
+    return;
+  }
+
+  try {
+    await sendTelegramMessage(chatId, `⏳ Проверяю канал...`);
+
+    const info = await resolveChannel(url, apiKey);
+
+    ChannelModel.upsert({
+      channel_id: info.channelId,
+      title: info.title,
+      url,
+      owner_user_id: user.id
+    });
+
+    await sendTelegramMessage(chatId, 
+      `✅ *Канал добавлен*\n\n` +
+      `📺 *${info.title}*\n` +
+      `ID: \`${info.channelId}\`\n` +
+      `URL: ${url}`
+    );
+  } catch (error) {
+    await sendTelegramMessage(chatId, 
+      `❌ *Ошибка добавления*\n\n${error.message || 'Не удалось добавить канал'}`
+    );
+  }
+}
+
 // POST /api/telegram/webhook - прием сообщений от бота
 router.post('/webhook', async (req, res) => {
   try {
@@ -123,43 +185,7 @@ router.post('/webhook', async (req, res) => {
       }
 
       const url = parts[1];
-
-      const userYoutubeKey = UserSettingsSQLite.get(user.id, 'youtube_api_key', '');
-      const apiKey = userYoutubeKey || (user.role === 'admin' ? process.env.YOUTUBE_API_KEY : '');
-
-      if (!apiKey) {
-        await sendTelegramMessage(chatId, 
-          `❌ *Ошибка настроек*\n\nYouTube API ключ не настроен в вашем профиле. ` +
-          `Зайдите в раздел *Настройки → Ключи* и укажите ключ.`
-        );
-        return res.json({ ok: true });
-      }
-
-      try {
-        // Отправляем статус
-        await sendTelegramMessage(chatId, `⏳ Проверяю канал...`);
-        
-        const info = await resolveChannel(url, apiKey);
-        
-        // Добавляем канал
-        ChannelModel.upsert({
-          channel_id: info.channelId,
-          title: info.title,
-          url,
-          owner_user_id: user.id
-        });
-
-        await sendTelegramMessage(chatId, 
-          `✅ *Канал добавлен*\n\n` +
-          `📺 *${info.title}*\n` +
-          `ID: \`${info.channelId}\`\n` +
-          `URL: ${url}`
-        );
-      } catch (error) {
-        await sendTelegramMessage(chatId, 
-          `❌ *Ошибка добавления*\n\n${error.message || 'Не удалось добавить канал'}`
-        );
-      }
+      await handleAddChannel(user, chatId, url);
     }
     else if (text.startsWith('/list_channels') || text === '/list') {
       console.log('🔍 [/list_channels] Запрос от user:', user.id, user.login, 'isAdmin:', user.role === 'admin', 'chatId:', chatId);
@@ -211,9 +237,15 @@ router.post('/webhook', async (req, res) => {
       }
     }
     else {
-      await sendTelegramMessage(chatId, 
-        `❓ Неизвестная команда\n\nИспользуйте /help для списка команд`
-      );
+      // Если это не команда, проверим, не похоже ли сообщение на ссылку на канал
+      const channelUrl = extractYoutubeChannelUrl(text);
+      if (channelUrl) {
+        await handleAddChannel(user, chatId, channelUrl);
+      } else {
+        await sendTelegramMessage(chatId, 
+          `❓ Неизвестная команда\n\nИспользуйте /help для списка команд`
+        );
+      }
     }
 
     res.json({ ok: true });
