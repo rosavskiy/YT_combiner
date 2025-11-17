@@ -172,7 +172,7 @@ router.post('/webhook', async (req, res) => {
         const responseText = formatChannelsList(channels);
         console.log('✉️ [/list_channels] Форматированный текст:', responseText.substring(0, 200));
         
-        const result = await sendTelegramMessage(chatId, responseText);
+        const result = await sendTelegramMessage(chatId, responseText, { markdown: false });
         console.log('✅ [/list_channels] Результат отправки:', result);
       } catch (error) {
         console.error('❌ [/list_channels] Ошибка:', error);
@@ -304,26 +304,33 @@ router.delete('/webhook', authenticateToken, async (req, res) => {
 });
 
 // Хелпер для отправки сообщений в Telegram
-async function sendTelegramMessage(chatId, text) {
+async function sendTelegramMessage(chatId, text, options = {}) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) {
     console.error('❌ [sendTelegramMessage] Токен не найден!');
     return;
   }
 
+  const useMarkdown = options.markdown !== false;
+
   console.log('📤 [sendTelegramMessage] Отправка сообщения в чат:', chatId);
   console.log('📝 [sendTelegramMessage] Текст (первые 100 символов):', text.substring(0, 100));
+
+  const payload = {
+    chat_id: chatId,
+    text,
+    disable_web_page_preview: true
+  };
+
+  if (useMarkdown) {
+    payload.parse_mode = 'Markdown';
+  }
 
   try {
     const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: text,
-        parse_mode: 'Markdown',
-        disable_web_page_preview: true
-      })
+      body: JSON.stringify(payload)
     });
 
     const result = await response.json();
