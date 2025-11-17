@@ -4,6 +4,7 @@ import axios from 'axios';
 import { authenticateToken } from '../middleware/auth.js';
 import ChannelModel from '../models/ChannelSQLite.js';
 import UserSQLite from '../models/UserSQLite.js';
+import UserSettingsSQLite from '../models/UserSettingsSQLite.js';
 import { resolveChannel } from '../services/youtubeChannelService.js';
 
 const router = express.Router();
@@ -122,11 +123,14 @@ router.post('/webhook', async (req, res) => {
       }
 
       const url = parts[1];
-      const apiKey = process.env.YOUTUBE_API_KEY;
-      
+
+      const userYoutubeKey = UserSettingsSQLite.get(user.id, 'youtube_api_key', '');
+      const apiKey = userYoutubeKey || (user.role === 'admin' ? process.env.YOUTUBE_API_KEY : '');
+
       if (!apiKey) {
         await sendTelegramMessage(chatId, 
-          `❌ *Ошибка сервера*\n\nYouTube API ключ не настроен`
+          `❌ *Ошибка настроек*\n\nYouTube API ключ не настроен в вашем профиле. ` +
+          `Зайдите в раздел *Настройки → Ключи* и укажите ключ.`
         );
         return res.json({ ok: true });
       }

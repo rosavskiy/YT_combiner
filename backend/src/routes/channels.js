@@ -2,11 +2,15 @@ import express from 'express';
 import ChannelModel from '../models/ChannelSQLite.js';
 import { authenticateToken, requireApproved } from '../middleware/auth.js';
 import { resolveChannel, fetchLatestActivities } from '../services/youtubeChannelService.js';
+import UserSettingsSQLite from '../models/UserSettingsSQLite.js';
 
 const router = express.Router();
 
-function getApiKey() {
-  return process.env.YOUTUBE_API_KEY;
+function getApiKeyForUser(user) {
+  const userKey = UserSettingsSQLite.get(user.id, 'youtube_api_key', '');
+  if (userKey) return userKey;
+  if (user.role === 'admin') return process.env.YOUTUBE_API_KEY;
+  return null;
 }
 
 // GET /api/channels - list channels
@@ -21,8 +25,8 @@ router.post('/', authenticateToken, requireApproved, async (req, res) => {
   try {
     const { url } = req.body || {};
     if (!url) return res.status(400).json({ success: false, error: 'Требуется ссылка или идентификатор канала' });
-    const apiKey = getApiKey();
-    if (!apiKey) return res.status(400).json({ success: false, error: 'На сервере не настроен YOUTUBE_API_KEY' });
+    const apiKey = getApiKeyForUser(req.user);
+    if (!apiKey) return res.status(400).json({ success: false, error: 'Не настроен YouTube API ключ в настройках пользователя' });
     const info = await resolveChannel(url, apiKey);
     ChannelModel.upsert({ channel_id: info.channelId, title: info.title, url, owner_user_id: req.user.id });
     res.json({ success: true, channel: info });
@@ -44,8 +48,8 @@ router.get('/activities', authenticateToken, requireApproved, async (req, res) =
   const limit = Math.min(50, parseInt(req.query.limit || '10', 10));
   const items = ChannelModel.all({ owner_user_id: req.user.id, isAdmin: req.user.role === 'admin' });
   if (!items.length) return res.json({ success: true, data: [] });
-  const apiKey = getApiKey();
-  if (!apiKey) return res.status(400).json({ success: false, error: 'На сервере не настроен YOUTUBE_API_KEY' });
+  const apiKey = getApiKeyForUser(req.user);
+  if (!apiKey) return res.status(400).json({ success: false, error: 'Не настроен YouTube API ключ в настройках пользователя' });
   try {
     const list = await fetchLatestActivities(items.map(i => i.channel_id), apiKey, limit);
     res.json({ success: true, data: list });
@@ -58,8 +62,8 @@ router.get('/activities', authenticateToken, requireApproved, async (req, res) =
 router.post('/refresh', authenticateToken, requireApproved, async (req, res) => {
   const limit = Math.min(50, parseInt(req.body?.limit || '10', 10));
   const items = ChannelModel.all({ owner_user_id: req.user.id, isAdmin: req.user.role === 'admin' });
-  const apiKey = getApiKey();
-  if (!apiKey) return res.status(400).json({ success: false, error: 'На сервере не настроен YOUTUBE_API_KEY' });
+  const apiKey = getApiKeyForUser(req.user);
+  if (!apiKey) return res.status(400).json({ success: false, error: 'Не настроен YouTube API ключ в настройках пользователя' });
   try {
     const list = await fetchLatestActivities(items.map(i => i.channel_id), apiKey, limit);
     res.json({ success: true, data: list });
