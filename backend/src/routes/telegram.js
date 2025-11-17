@@ -83,15 +83,25 @@ async function handleAddChannel(user, chatId, url) {
 
     const info = await resolveChannel(url, apiKey);
 
-    ChannelModel.upsert({
+    // Проверим, был ли канал уже в списке пользователя
+    const existing = ChannelModel.all({ owner_user_id: user.id, isAdmin: false })
+      .find(ch => ch.channel_id === info.channelId);
+
+    const result = ChannelModel.upsert({
       channel_id: info.channelId,
       title: info.title,
       url,
       owner_user_id: user.id
     });
 
+    const isNew = !existing && result.changes > 0;
+
+    const statusLine = isNew
+      ? '✅ *Канал добавлен*'
+      : '♻️ *Канал уже был в списке*';
+
     await sendTelegramMessage(chatId, 
-      `✅ *Канал добавлен*\n\n` +
+      `${statusLine}\n\n` +
       `📺 *${info.title}*\n` +
       `ID: \`${info.channelId}\`\n` +
       `URL: ${url}`
