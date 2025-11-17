@@ -25,19 +25,28 @@ function getUserByTelegramId(telegramId) {
   return UserSQLite.findByTelegramId(telegramId);
 }
 
+// Экранирование текста для MarkdownV2
+function escapeMarkdownV2(text) {
+  if (!text) return '';
+  return String(text).replace(/[\\_\*\[\]\(\)~`>#+\-=|{}\.]/g, '\\$&');
+}
+
 // Форматирование ответа для Telegram
 function formatChannelsList(channels) {
   if (!channels.length) {
-    return '📋 *Список каналов пуст*\n\nИспользуйте /add\\_channel <ссылка> для добавления';
+    return '📋 *Список каналов пуст*\n\nИспользуйте /add_channel <ссылка> для добавления';
   }
   
   let text = `📋 *Отслеживаемые каналы* (${channels.length}):\n\n`;
   channels.forEach((ch, idx) => {
-    text += `${idx + 1}. *${ch.title || 'Без названия'}*\n`;
-    text += `   ID: \`${ch.channel_id}\`\n`;
-    text += `   URL: ${ch.url}\n\n`;
+    const safeTitle = escapeMarkdownV2(ch.title || 'Без названия');
+    const safeUrl = escapeMarkdownV2(ch.url || '');
+    if (safeUrl) {
+      text += `${idx + 1}. [${safeTitle}](${safeUrl})\n`;
+    } else {
+      text += `${idx + 1}. ${safeTitle}\n`;
+    }
   });
-  text += '_Используйте /remove\\_channel <ID> для удаления_';
   return text;
 }
 
@@ -212,7 +221,7 @@ router.post('/webhook', async (req, res) => {
         const responseText = formatChannelsList(channels);
         console.log('✉️ [/list_channels] Форматированный текст:', responseText.substring(0, 200));
         
-        const result = await sendTelegramMessage(chatId, responseText, { markdown: false });
+        const result = await sendTelegramMessage(chatId, responseText);
         console.log('✅ [/list_channels] Результат отправки:', result);
       } catch (error) {
         console.error('❌ [/list_channels] Ошибка:', error);
@@ -369,7 +378,7 @@ async function sendTelegramMessage(chatId, text, options = {}) {
   };
 
   if (useMarkdown) {
-    payload.parse_mode = 'Markdown';
+    payload.parse_mode = 'MarkdownV2';
   }
 
   try {
