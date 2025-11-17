@@ -27,6 +27,7 @@ const SettingsPage = () => {
 
   const [apiKey, setApiKey] = useState(() => readLS('youtube_api_key', ''));
   const [spreadsheetId, setSpreadsheetId] = useState(() => readLS('sheets_spreadsheet_id', ''));
+  const [openaiApiKey, setOpenaiApiKey] = useState(() => readLS('openai_api_key', ''));
 
   // Dev server shared key (only in development) – fallback helper
   const { data: serverApiKey } = useQuery({
@@ -65,13 +66,15 @@ const SettingsPage = () => {
   // Перенос из DB (user-keys) в локальное состояние при загрузке
   useEffect(() => {
     if (userKeysResp?.data) {
-      const { youtubeApiKey: k = '', spreadsheetId: s = '' } = userKeysResp.data;
+      const { youtubeApiKey: k = '', spreadsheetId: s = '', openaiApiKey: o = '' } = userKeysResp.data;
       // Сохраняем в localStorage namespace текущего пользователя для оффлайн-UX
       writeLS('youtube_api_key', k || '');
       writeLS('sheets_spreadsheet_id', s || '');
+      writeLS('openai_api_key', o || '');
       setApiKey(k || '');
       setSpreadsheetId(s || '');
-      form.setFieldsValue({ apiKey: k || '', spreadsheetId: s || '' });
+      setOpenaiApiKey(o || '');
+      form.setFieldsValue({ apiKey: k || '', spreadsheetId: s || '', openaiApiKey: o || '' });
     } else if (serverApiKey?.apiKey && !apiKey) {
       // Fallback dev shared key (only when per-user нет и локально пусто)
       const key = serverApiKey.apiKey;
@@ -86,9 +89,11 @@ const SettingsPage = () => {
   useEffect(() => {
     const k = readLS('youtube_api_key', '');
     const s = readLS('sheets_spreadsheet_id', '');
+    const o = readLS('openai_api_key', '');
     setApiKey(k);
     setSpreadsheetId(s);
-    form.setFieldsValue({ apiKey: k, spreadsheetId: s });
+    setOpenaiApiKey(o);
+    form.setFieldsValue({ apiKey: k, spreadsheetId: s, openaiApiKey: o });
   }, [user?.id]);
 
   const saveUserKeysMutation = useMutation({
@@ -104,23 +109,28 @@ const SettingsPage = () => {
     const payload = {
       youtubeApiKey: values.apiKey || '',
       spreadsheetId: values.spreadsheetId || '',
+      openaiApiKey: values.openaiApiKey || '',
     };
     // Локально для UX
     writeLS('youtube_api_key', payload.youtubeApiKey);
     writeLS('sheets_spreadsheet_id', payload.spreadsheetId);
+    writeLS('openai_api_key', payload.openaiApiKey);
     setApiKey(payload.youtubeApiKey);
     setSpreadsheetId(payload.spreadsheetId);
+    setOpenaiApiKey(payload.openaiApiKey);
     saveUserKeysMutation.mutate(payload);
   };
 
   const handleClear = () => {
     writeLS('youtube_api_key', '');
     writeLS('sheets_spreadsheet_id', '');
+    writeLS('openai_api_key', '');
     setApiKey('');
     setSpreadsheetId('');
+    setOpenaiApiKey('');
     form.resetFields();
     // Отправляем пустые строки, чтобы удалить на сервере
-    saveUserKeysMutation.mutate({ youtubeApiKey: '', spreadsheetId: '' });
+    saveUserKeysMutation.mutate({ youtubeApiKey: '', spreadsheetId: '', openaiApiKey: '' });
     message.info('🗑️ Ключи очищены');
   };
 
@@ -291,6 +301,15 @@ const SettingsPage = () => {
               <Input prefix={<LinkOutlined />} placeholder="1A2B3C... (ID документа)" size="large" />
             </Form.Item>
 
+            <Form.Item
+              label={<Text strong>OpenAI API Key (для Whisper AI)</Text>}
+              name="openaiApiKey"
+              rules={[]}
+              extra="Для автоматической транскрибации видео без субтитров. Получите ключ на platform.openai.com"
+            >
+              <Input.Password prefix={<KeyOutlined />} placeholder="sk-..." size="large" />
+            </Form.Item>
+
             <Form.Item>
               <Space>
                 <Button type="primary" htmlType="submit" icon={<SaveOutlined />} size="large" loading={saveUserKeysMutation.isPending}>Сохранить</Button>
@@ -302,6 +321,15 @@ const SettingsPage = () => {
 
           {apiKey && (
             <Alert message="API ключ установлен" description={`Текущий ключ: ${apiKey.substring(0, 10)}...`} type="success" showIcon />
+          )}
+
+          {openaiApiKey && (
+            <Alert 
+              message="OpenAI API ключ установлен" 
+              description="Whisper AI будет автоматически транскрибировать видео без субтитров" 
+              type="success" 
+              showIcon 
+            />
           )}
 
           <Divider />
@@ -316,6 +344,12 @@ const SettingsPage = () => {
               </a>
               <a href="https://developers.google.com/youtube/v3/getting-started" target="_blank" rel="noopener noreferrer">
                 <LinkOutlined /> Getting Started Guide
+              </a>
+              <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">
+                <LinkOutlined /> OpenAI API Keys (для Whisper)
+              </a>
+              <a href="https://platform.openai.com/docs/guides/speech-to-text" target="_blank" rel="noopener noreferrer">
+                <LinkOutlined /> Whisper API Documentation
               </a>
             </Space>
           </Card>

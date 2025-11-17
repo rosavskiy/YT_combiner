@@ -1,0 +1,211 @@
+{
+  "name": "YT Zavod - Auto Parse Videos",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "video-parsed",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-video-parsed",
+      "name": "Webhook Video Parsed",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "video-parsed-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.body.status}}",
+              "value2": "completed"
+            }
+          ]
+        }
+      },
+      "id": "if-completed",
+      "name": "Is Completed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const body = $input.item.json.body;\nconst videoId = body.videoId;\nconst result = body.result || {};\n\nreturn {\n  json: {\n    videoId,\n    status: body.status,\n    event: body.event,\n    timestamp: body.timestamp,\n    hasTranscript: !!result.transcript,\n    hasChapters: (result.chapters || []).length > 0,\n    fullText: result.full_text || '',\n    language: result.transcript?.language || 'unknown'\n  }\n};"
+      },
+      "id": "extract-parsed-data",
+      "name": "Extract Parsed Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [650, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_URL}}/api/videos/{{$json.videoId}}/transcript",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "requestMethod": "GET",
+        "options": {}
+      },
+      "id": "get-transcript",
+      "name": "Get Full Transcript",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [850, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "1",
+          "name": "YT Zavod API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{$env.TELEGRAM_ADMIN_CHAT_ID}}",
+        "text": "=✅ *Видео распарсено*\n\n📹 Video ID: `{{$json.videoId}}`\n🌐 Язык: {{$json.language}}\n📝 Текст: {{$json.hasTranscript ? 'Есть' : 'Нет'}}\n⏱️ Таймкоды: {{$json.hasChapters ? 'Есть' : 'Нет'}}\n\n_Время: {{$json.timestamp}}_",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "notify-telegram",
+      "name": "Notify via Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [1050, 200],
+      "credentials": {
+        "telegramApi": {
+          "id": "2",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, received: true } }}"
+      },
+      "id": "respond-ok",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1250, 200]
+    },
+    {
+      "parameters": {
+        "chatId": "={{$env.TELEGRAM_ADMIN_CHAT_ID}}",
+        "text": "=❌ *Ошибка парсинга видео*\n\n📹 Video ID: `{{$json.body.videoId}}`\n⚠️ Ошибка: {{$json.body.error}}\n\n_Время: {{$json.body.timestamp}}_",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "notify-error",
+      "name": "Notify Error",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [650, 400],
+      "credentials": {
+        "telegramApi": {
+          "id": "2",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, received: true } }}"
+      },
+      "id": "respond-error",
+      "name": "Respond Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 400]
+    }
+  ],
+  "connections": {
+    "Webhook Video Parsed": {
+      "main": [
+        [
+          {
+            "node": "Is Completed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Completed?": {
+      "main": [
+        [
+          {
+            "node": "Extract Parsed Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Parsed Data": {
+      "main": [
+        [
+          {
+            "node": "Get Full Transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Full Transcript": {
+      "main": [
+        [
+          {
+            "node": "Notify via Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify via Telegram": {
+      "main": [
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Error": {
+      "main": [
+        [
+          {
+            "node": "Respond Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "instanceId": "your-instance-id"
+  },
+  "tags": []
+}

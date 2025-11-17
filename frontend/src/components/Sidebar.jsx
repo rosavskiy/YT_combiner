@@ -36,6 +36,7 @@ const Sidebar = () => {
       key: 'profile',
       icon: <UserOutlined />,
       label: 'Профиль',
+      onClick: () => navigate('/profile')
     },
     ...(impersonating ? [{
       key: 'revert',

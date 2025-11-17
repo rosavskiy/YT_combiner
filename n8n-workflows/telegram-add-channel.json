@@ -1,0 +1,146 @@
+{
+  "name": "YT Zavod - Telegram Add Channel",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "telegram-bot",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-telegram",
+      "name": "Webhook Telegram Bot",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "telegram-bot-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.body.message.text}}",
+              "operation": "startsWith",
+              "value2": "/add_channel"
+            }
+          ]
+        }
+      },
+      "id": "if-add-channel",
+      "name": "Is Add Channel Command?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const message = $input.item.json.body.message;\nconst text = message.text || '';\nconst parts = text.split(/\\s+/);\nconst url = parts[1] || '';\nconst telegramId = message.from.id;\nconst chatId = message.chat.id;\n\nreturn {\n  json: {\n    url,\n    telegramId,\n    chatId,\n    userName: message.from.first_name || 'User'\n  }\n};"
+      },
+      "id": "extract-data",
+      "name": "Extract Channel URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [650, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_URL}}/api/telegram/webhook",
+        "authentication": "none",
+        "requestMethod": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify($input.item.json.body)}}",
+        "options": {}
+      },
+      "id": "forward-to-backend",
+      "name": "Forward to YT Zavod Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [850, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true } }}"
+      },
+      "id": "respond-ok",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1050, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true } }}"
+      },
+      "id": "respond-other",
+      "name": "Respond Other Commands",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [650, 400]
+    }
+  ],
+  "connections": {
+    "Webhook Telegram Bot": {
+      "main": [
+        [
+          {
+            "node": "Is Add Channel Command?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Add Channel Command?": {
+      "main": [
+        [
+          {
+            "node": "Extract Channel URL",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Other Commands",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Channel URL": {
+      "main": [
+        [
+          {
+            "node": "Forward to YT Zavod Backend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Forward to YT Zavod Backend": {
+      "main": [
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "instanceId": "your-instance-id"
+  },
+  "tags": []
+}

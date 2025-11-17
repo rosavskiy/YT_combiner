@@ -200,6 +200,20 @@ class VideoDownloadService {
         } else {
           VideoSQLite.updateStatus(job.data.videoId, 'completed', job.id);
         }
+        
+        // Автоматический парсинг после скачивания
+        const autoParse = process.env.AUTO_PARSE_AFTER_DOWNLOAD !== 'false';
+        if (autoParse && job.data.videoId) {
+          console.log(`🔄 Автоматический запуск парсинга для: ${job.data.videoId}`);
+          try {
+            await this.addParseJob(job.data.videoId, {
+              languages: ['en', 'ru'],
+              autoTriggered: true
+            });
+          } catch (parseError) {
+            console.warn(`⚠️ Не удалось запустить автопарсинг: ${parseError.message}`);
+          }
+        }
       } catch (e) {
         console.warn('⚠️ Failed to mark downloaded:', e?.message);
       }
@@ -210,12 +224,54 @@ class VideoDownloadService {
       console.log(`❌ Download failed: ${job.data.videoId} - ${err.message}`);
     });
 
-    this.parseQueue.on('completed', (job, result) => {
+    this.parseQueue.on('completed', async (job, result) => {
       console.log(`✅ Parsing completed: ${job.data.videoId}`);
+      
+      // Отправка webhook на n8n
+      const webhookUrl = process.env.N8N_WEBHOOK_URL;
+      if (webhookUrl && job.data.videoId) {
+        try {
+          const response = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              event: 'video-parsed',
+              videoId: job.data.videoId,
+              status: 'completed',
+              result: result,
+              timestamp: new Date().toISOString()
+            })
+          });
+          
+          if (response.ok) {
+            console.log(`📤 N8N webhook отправлен для: ${job.data.videoId}`);
+          } else {
+            console.warn(`⚠️ N8N webhook ответил с кодом: ${response.status}`);
+          }
+        } catch (webhookError) {
+          console.warn(`⚠️ Ошибка отправки webhook: ${webhookError.message}`);
+        }
+      }
     });
 
     this.parseQueue.on('failed', (job, err) => {
       console.log(`❌ Parsing failed: ${job?.data?.videoId || job?.id} - ${err?.message}`);
+      
+      // Отправка webhook об ошибке
+      const webhookUrl = process.env.N8N_WEBHOOK_URL;
+      if (webhookUrl && job?.data?.videoId) {
+        fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            event: 'video-parse-failed',
+            videoId: job.data.videoId,
+            status: 'failed',
+            error: err?.message,
+            timestamp: new Date().toISOString()
+          })
+        }).catch(() => {});
+      }
     });
     this.parseQueue.on('stalled', (job) => {
       console.log(`⚠️ Parsing job stalled, will retry: ${job.id}`);

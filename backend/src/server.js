@@ -21,6 +21,7 @@ import channelsRouter from './routes/channels.js';
 import authRouter from './routes/auth.js';
 import worktimeRouter from './routes/worktime.js';
 import userRouter from './routes/user.js';
+import telegramRouter from './routes/telegram.js';
 
 // Config
 // MongoDB отключен по умолчанию (используем SQLite)
@@ -123,6 +124,7 @@ app.use('/api/config', configRouter);
 app.use('/api/topics', topicsRouter);
 app.use('/api/system', systemRouter);
 app.use('/api/channels', channelsRouter);
+app.use('/api/telegram', telegramRouter);
 
 // Root endpoint
 app.get('/', (req, res) => {

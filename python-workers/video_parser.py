@@ -1,6 +1,7 @@
 """
 Парсер YouTube видео: субтитры, таймкоды, транскрипт
 Интеграция с Google Sheets для хранения данных
+Транскрибация аудио через Whisper (локально или OpenAI API)
 """
 
 import os
@@ -16,6 +17,8 @@ from google.oauth2 import service_account
 import yt_dlp
 from typing import Any, Dict, List, Optional, cast
 import base64
+import subprocess
+import tempfile
 
 try:
     # Грузим .env из корня репозитория (ищем вверх по дереву)
@@ -445,6 +448,198 @@ class VideoParser:
             return ""
         
         return " ".join([seg['text'] for seg in transcript['segments']])
+    
+    def transcribe_audio_with_whisper(self, video_id, model='base', language=None, use_openai_api=False):
+        """
+        Транскрибация аудио из видео через Whisper
+        
+        Args:
+            video_id: YouTube video ID
+            model: Модель Whisper ('tiny', 'base', 'small', 'medium', 'large')
+                   Используется только для локального Whisper
+            language: Язык аудио (например, 'en', 'ru'). None = автоопределение
+            use_openai_api: Использовать OpenAI API вместо локального Whisper
+            
+        Returns:
+            dict: Транскрипт с временными метками или None
+        """
+        try:
+            # Проверяем переменные окружения
+            if use_openai_api or os.environ.get('OPENAI_API_KEY'):
+                print("[INFO] Используем OpenAI Whisper API")
+                return self._transcribe_via_openai_whisper(video_id, os.environ.get('OPENAI_API_KEY'), language)
+            
+            # Локальный Whisper
+            print(f"[INFO] Используем локальный Whisper (модель: {model})")
+            return self._transcribe_via_local_whisper(video_id, model, language)
+            
+        except Exception as e:
+            print(f"[ERR] Ошибка транскрибации Whisper: {e}")
+            return None
+    
+    def _transcribe_via_openai_whisper(self, video_id, api_key, language=None):
+        """Транскрибация через OpenAI Whisper API"""
+        if not api_key:
+            print("[WARN] OPENAI_API_KEY не настроен")
+            return None
+        
+        try:
+            # Проверяем наличие библиотеки openai
+            try:
+                from openai import OpenAI
+            except ImportError:
+                print("[WARN] Библиотека openai не установлена. Установите: pip install openai")
+                return None
+            
+            # Получаем прямую ссылку на аудио
+            audio_url = self._get_best_audio_url(video_id)
+            if not audio_url:
+                print("[WARN] Не удалось получить ссылку на аудио")
+                return None
+            
+            print(f"[INFO] Скачиваем аудио для транскрибации...")
+            
+            # Скачиваем аудио во временный файл
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as tmp_audio:
+                audio_response = requests.get(audio_url, stream=True, timeout=60)
+                if not audio_response.ok:
+                    print(f"[ERR] Не удалось скачать аудио: {audio_response.status_code}")
+                    return None
+                
+                for chunk in audio_response.iter_content(chunk_size=8192):
+                    tmp_audio.write(chunk)
+                
+                tmp_audio_path = tmp_audio.name
+            
+            print(f"[INFO] Аудио сохранено: {tmp_audio_path}")
+            print(f"[INFO] Отправляем на транскрибацию в OpenAI...")
+            
+            # Вызываем OpenAI API
+            client = OpenAI(api_key=api_key)
+            
+            with open(tmp_audio_path, 'rb') as audio_file:
+                params = {
+                    'file': audio_file,
+                    'model': 'whisper-1',
+                    'response_format': 'verbose_json',  # Получаем временные метки
+                }
+                if language:
+                    params['language'] = language
+                
+                transcript = client.audio.transcriptions.create(**params)
+            
+            # Удаляем временный файл
+            try:
+                os.unlink(tmp_audio_path)
+            except:
+                pass
+            
+            # Преобразуем в наш формат
+            segments = []
+            if hasattr(transcript, 'segments') and transcript.segments:
+                for seg in transcript.segments:
+                    segments.append({
+                        'start': seg.get('start', 0),
+                        'duration': seg.get('end', 0) - seg.get('start', 0),
+                        'text': seg.get('text', '').strip()
+                    })
+            else:
+                # Если нет сегментов, создаем один большой
+                segments = [{
+                    'start': 0,
+                    'duration': 0,
+                    'text': transcript.text if hasattr(transcript, 'text') else str(transcript)
+                }]
+            
+            print(f"[SUCCESS] Транскрибация выполнена: {len(segments)} сегментов")
+            
+            return {
+                'language': language or 'auto',
+                'type': 'whisper_api',
+                'segments': segments,
+                'source': 'openai_whisper_api'
+            }
+            
+        except Exception as e:
+            print(f"[ERR] Ошибка OpenAI Whisper API: {e}")
+            return None
+    
+    def _transcribe_via_local_whisper(self, video_id, model='base', language=None):
+        """Транскрибация через локальный Whisper"""
+        try:
+            # Проверяем наличие библиотеки whisper
+            try:
+                import whisper
+            except ImportError:
+                print("[WARN] Библиотека openai-whisper не установлена.")
+                print("[INFO] Установите: pip install openai-whisper")
+                print("[INFO] Внимание: требуется ffmpeg и PyTorch (>1GB)")
+                return None
+            
+            # Получаем аудио
+            audio_url = self._get_best_audio_url(video_id)
+            if not audio_url:
+                print("[WARN] Не удалось получить ссылку на аудио")
+                return None
+            
+            print(f"[INFO] Скачиваем аудио для локальной транскрибации...")
+            
+            # Скачиваем аудио
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as tmp_audio:
+                audio_response = requests.get(audio_url, stream=True, timeout=60)
+                if not audio_response.ok:
+                    return None
+                
+                for chunk in audio_response.iter_content(chunk_size=8192):
+                    tmp_audio.write(chunk)
+                
+                tmp_audio_path = tmp_audio.name
+            
+            print(f"[INFO] Загружаем модель Whisper: {model}")
+            model_obj = whisper.load_model(model)
+            
+            print(f"[INFO] Транскрибируем аудио...")
+            options = {}
+            if language:
+                options['language'] = language
+            
+            result = model_obj.transcribe(tmp_audio_path, **options)
+            
+            # Удаляем временный файл
+            try:
+                os.unlink(tmp_audio_path)
+            except:
+                pass
+            
+            # Преобразуем в наш формат
+            segments = []
+            if 'segments' in result:
+                for seg in result['segments']:
+                    segments.append({
+                        'start': seg.get('start', 0),
+                        'duration': seg.get('end', 0) - seg.get('start', 0),
+                        'text': seg.get('text', '').strip()
+                    })
+            else:
+                segments = [{
+                    'start': 0,
+                    'duration': 0,
+                    'text': result.get('text', '')
+                }]
+            
+            detected_lang = result.get('language', language or 'auto')
+            print(f"[SUCCESS] Транскрибация выполнена: {len(segments)} сегментов (язык: {detected_lang})")
+            
+            return {
+                'language': detected_lang,
+                'type': 'whisper_local',
+                'segments': segments,
+                'source': f'whisper_local_{model}'
+            }
+            
+        except Exception as e:
+            print(f"[ERR] Ошибка локального Whisper: {e}")
+            return None
 
     @staticmethod
     def _format_duration_hhmm(seconds: int) -> str:

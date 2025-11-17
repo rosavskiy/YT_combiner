@@ -16,6 +16,7 @@ import UsersManagementPage from './pages/UsersManagementPage';
 import ReportsPage from './pages/ReportsPage';
 import AdminUserKeysPage from './pages/AdminUserKeysPage';
 import EmployeePage from './pages/EmployeePage';
+import ProfilePage from './pages/ProfilePage';
 import { useSocketStore } from './stores/socketStore';
 import useAuthStore from './stores/authStore';
 
@@ -72,6 +73,7 @@ function App() {
               <Route path="/generator" element={<ProtectedLayout><GeneratorPage /></ProtectedLayout>} />
               <Route path="/ai-tasks" element={<ProtectedLayout><AITasksPage /></ProtectedLayout>} />
               <Route path="/settings" element={<ProtectedLayout><SettingsPage /></ProtectedLayout>} />
+              <Route path="/profile" element={<ProtectedLayout><ProfilePage /></ProtectedLayout>} />
               
               {/* Админ маршруты */}
               <Route path="/users" element={<ProtectedLayout requireAdmin><UsersManagementPage /></ProtectedLayout>} />

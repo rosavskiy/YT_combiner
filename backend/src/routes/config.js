@@ -101,7 +101,8 @@ router.put('/tracked-countries', authenticateToken, requireApproved, (req, res) 
 router.get('/user-keys', authenticateToken, requireApproved, (req, res) => {
   const youtubeApiKey = UserSettingsSQLite.get(req.user.id, 'youtube_api_key', '');
   const spreadsheetId = UserSettingsSQLite.get(req.user.id, 'sheets_spreadsheet_id', '');
-  res.json({ success: true, data: { youtubeApiKey, spreadsheetId } });
+  const openaiApiKey = UserSettingsSQLite.get(req.user.id, 'openai_api_key', '');
+  res.json({ success: true, data: { youtubeApiKey, spreadsheetId, openaiApiKey } });
 });
 
 /**
@@ -110,7 +111,7 @@ router.get('/user-keys', authenticateToken, requireApproved, (req, res) => {
  * body: { youtubeApiKey?: string, spreadsheetId?: string }
  */
 router.put('/user-keys', authenticateToken, requireApproved, (req, res) => {
-  const { youtubeApiKey, spreadsheetId } = req.body || {};
+  const { youtubeApiKey, spreadsheetId, openaiApiKey } = req.body || {};
 
   const resBody = { saved: [] };
 
@@ -146,9 +147,25 @@ router.put('/user-keys', authenticateToken, requireApproved, (req, res) => {
     resBody.saved.push('spreadsheetId');
   }
 
+  if (typeof openaiApiKey !== 'undefined') {
+    if (openaiApiKey !== '' && typeof openaiApiKey !== 'string') {
+      return res.status(400).json({ success: false, error: 'openaiApiKey должен быть строкой или пустым' });
+    }
+    if (typeof openaiApiKey === 'string' && openaiApiKey !== '' && openaiApiKey.length < 20) {
+      return res.status(400).json({ success: false, error: 'openaiApiKey слишком короткий' });
+    }
+    if (!openaiApiKey) {
+      UserSettingsSQLite.delete(req.user.id, 'openai_api_key');
+    } else {
+      UserSettingsSQLite.set(req.user.id, 'openai_api_key', openaiApiKey);
+    }
+    resBody.saved.push('openaiApiKey');
+  }
+
   const data = {
     youtubeApiKey: UserSettingsSQLite.get(req.user.id, 'youtube_api_key', ''),
     spreadsheetId: UserSettingsSQLite.get(req.user.id, 'sheets_spreadsheet_id', ''),
+    openaiApiKey: UserSettingsSQLite.get(req.user.id, 'openai_api_key', ''),
   };
   res.json({ success: true, ...resBody, data });
 });
@@ -163,6 +180,7 @@ router.get('/admin/user-keys', authenticateToken, requireAdmin, (req, res) => {
     const data = users.map(u => {
       const hasYoutubeKey = !!UserSettingsSQLite.get(u.id, 'youtube_api_key', '');
       const hasSpreadsheetId = !!UserSettingsSQLite.get(u.id, 'sheets_spreadsheet_id', '');
+      const hasOpenaiKey = !!UserSettingsSQLite.get(u.id, 'openai_api_key', '');
       return {
         id: u.id,
         login: u.login,
@@ -172,6 +190,7 @@ router.get('/admin/user-keys', authenticateToken, requireAdmin, (req, res) => {
         role: u.role,
         hasYoutubeKey,
         hasSpreadsheetId,
+        hasOpenaiKey,
       };
     });
     res.json({ success: true, data });
@@ -189,7 +208,8 @@ router.get('/admin/user-keys/:id', authenticateToken, requireAdmin, (req, res) =
   if (Number.isNaN(targetId)) return res.status(400).json({ success: false, error: 'Некорректный ID' });
   const youtubeApiKey = UserSettingsSQLite.get(targetId, 'youtube_api_key', '');
   const spreadsheetId = UserSettingsSQLite.get(targetId, 'sheets_spreadsheet_id', '');
-  res.json({ success: true, data: { youtubeApiKey, spreadsheetId } });
+  const openaiApiKey = UserSettingsSQLite.get(targetId, 'openai_api_key', '');
+  res.json({ success: true, data: { youtubeApiKey, spreadsheetId, openaiApiKey } });
 });
 
 /**
@@ -200,7 +220,7 @@ router.get('/admin/user-keys/:id', authenticateToken, requireAdmin, (req, res) =
 router.put('/admin/user-keys/:id', authenticateToken, requireAdmin, (req, res) => {
   const targetId = parseInt(req.params.id, 10);
   if (Number.isNaN(targetId)) return res.status(400).json({ success: false, error: 'Некорректный ID' });
-  const { youtubeApiKey, spreadsheetId } = req.body || {};
+  const { youtubeApiKey, spreadsheetId, openaiApiKey } = req.body || {};
   const saved = [];
   if (typeof youtubeApiKey !== 'undefined') {
     if (!youtubeApiKey) {
@@ -220,9 +240,19 @@ router.put('/admin/user-keys/:id', authenticateToken, requireAdmin, (req, res) =
     }
     saved.push('spreadsheetId');
   }
+  if (typeof openaiApiKey !== 'undefined') {
+    if (!openaiApiKey) {
+      UserSettingsSQLite.delete(targetId, 'openai_api_key');
+    } else {
+      if (openaiApiKey.length < 20) return res.status(400).json({ success: false, error: 'openaiApiKey слишком короткий' });
+      UserSettingsSQLite.set(targetId, 'openai_api_key', openaiApiKey);
+    }
+    saved.push('openaiApiKey');
+  }
   const data = {
     youtubeApiKey: UserSettingsSQLite.get(targetId, 'youtube_api_key', ''),
     spreadsheetId: UserSettingsSQLite.get(targetId, 'sheets_spreadsheet_id', ''),
+    openaiApiKey: UserSettingsSQLite.get(targetId, 'openai_api_key', ''),
   };
   res.json({ success: true, saved, data });
 });

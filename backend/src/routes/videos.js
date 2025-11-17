@@ -435,4 +435,93 @@ router.post('/sheets/template', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/videos/:videoId/transcript
+ * Получить транскрипт (текст) видео
+ */
+router.get('/:videoId/transcript', authenticateToken, requireApproved, async (req, res) => {
+  try {
+    const { videoId } = req.params;
+    
+    // Проверяем, есть ли видео в БД
+    const video = VideoSQLite.findByVideoId(videoId);
+    
+    if (!video) {
+      return res.status(404).json({
+        success: false,
+        error: 'Видео не найдено в базе'
+      });
+    }
+    
+    // Проверяем, есть ли сохраненный парсинг
+    const parseDataPath = path.join(process.cwd(), 'python-workers', `${videoId}_parsed.json`);
+    
+    if (fs.existsSync(parseDataPath)) {
+      const parseData = JSON.parse(fs.readFileSync(parseDataPath, 'utf-8'));
+      
+      return res.json({
+        success: true,
+        data: {
+          videoId,
+          title: parseData.info?.title || video.title,
+          fullText: parseData.full_text || '',
+          transcript: parseData.transcript || null,
+          chapters: parseData.chapters || [],
+          parsed: true
+        }
+      });
+    }
+    
+    // Если парсинга нет, предлагаем запустить
+    res.json({
+      success: true,
+      data: {
+        videoId,
+        title: video.title,
+        fullText: null,
+        transcript: null,
+        chapters: [],
+        parsed: false,
+        message: 'Видео не распарсено. Используйте POST /api/videos/parse'
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Ошибка получения транскрипта:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/videos/webhook/n8n
+ * Webhook для уведомлений n8n о завершении парсинга
+ */
+router.post('/webhook/n8n', async (req, res) => {
+  try {
+    const { videoId, status, data } = req.body;
+    
+    // Логируем для отладки
+    console.log('[N8N Webhook] Получено уведомление:', { videoId, status });
+    
+    // Отправляем уведомление через Socket.IO если есть
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('video-parsed', { videoId, status, data });
+    }
+    
+    // Обновляем статус в БД
+    if (videoId) {
+      VideoSQLite.updateStatus(videoId, status === 'completed' ? 'parsed' : 'error');
+    }
+    
+    res.json({ success: true, received: true });
+  } catch (error) {
+    console.error('❌ Ошибка N8N webhook:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 export default router;

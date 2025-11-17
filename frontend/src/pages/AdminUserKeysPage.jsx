@@ -22,8 +22,8 @@ const AdminUserKeysPage = () => {
   const openEdit = async (record) => {
     try {
       const resp = await configService.adminGetUserKeys(record.id);
-      const { youtubeApiKey = '', spreadsheetId = '' } = resp.data.data || {};
-      form.setFieldsValue({ youtubeApiKey, spreadsheetId });
+      const { youtubeApiKey = '', spreadsheetId = '', openaiApiKey = '' } = resp.data.data || {};
+      form.setFieldsValue({ youtubeApiKey, spreadsheetId, openaiApiKey });
       setEditingUser(record);
       setModalOpen(true);
     } catch (e) {
@@ -49,7 +49,7 @@ const AdminUserKeysPage = () => {
   };
 
   const handleClear = () => {
-    saveMutation.mutate({ userId: editingUser.id, payload: { youtubeApiKey: '', spreadsheetId: '' } });
+    saveMutation.mutate({ userId: editingUser.id, payload: { youtubeApiKey: '', spreadsheetId: '', openaiApiKey: '' } });
   };
 
   const columns = [
@@ -66,6 +66,11 @@ const AdminUserKeysPage = () => {
     {
       title: 'Sheets ID',
       dataIndex: 'hasSpreadsheetId',
+      render: (v) => v ? <Tag color="green">Есть</Tag> : <Tag>Нет</Tag>,
+    },
+    {
+      title: 'OpenAI API',
+      dataIndex: 'hasOpenaiKey',
       render: (v) => v ? <Tag color="green">Есть</Tag> : <Tag>Нет</Tag>,
     },
     {
@@ -88,7 +93,7 @@ const AdminUserKeysPage = () => {
           <KeyOutlined style={{ fontSize: 28 }} />
           <Title level={2} style={{ margin: 0 }}>Персональные ключи пользователей</Title>
         </Space>
-        <Text type="secondary">Админ может установить или очистить YouTube API Key и Spreadsheet ID для любого пользователя. Очистка удаляет сохранённые значения из серверной БД.</Text>
+        <Text type="secondary">Админ может установить или очистить YouTube API Key, Spreadsheet ID и OpenAI API Key для любого пользователя. Очистка удаляет сохранённые значения из серверной БД.</Text>
         <Space>
           <Button icon={<ReloadOutlined />} onClick={() => usersQuery.refetch()} loading={usersQuery.isFetching}>Обновить</Button>
         </Space>
@@ -121,6 +126,9 @@ const AdminUserKeysPage = () => {
           </Form.Item>
           <Form.Item label="Google Sheets Spreadsheet ID" name="spreadsheetId" rules={[{ validator(_, value) { if (value && value.length < 10) return Promise.reject('ID слишком короткий'); return Promise.resolve(); } }]}>
             <Input placeholder="1AbCDe..." autoComplete="off" allowClear />
+          </Form.Item>
+          <Form.Item label="OpenAI API Key (Whisper AI)" name="openaiApiKey" rules={[{ validator(_, value) { if (value && value.length < 20) return Promise.reject('Слишком короткий ключ'); return Promise.resolve(); } }]}>
+            <Input.Password placeholder="sk-..." autoComplete="off" allowClear />
           </Form.Item>
         </Form>
       </Modal>

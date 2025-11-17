@@ -1,0 +1,227 @@
+{
+  "name": "YT Zavod - Monitor Channels",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Every 6 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_URL}}/api/channels/activities?limit=20",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "requestMethod": "GET",
+        "options": {}
+      },
+      "id": "get-activities",
+      "name": "Get Channel Activities",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [450, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "1",
+          "name": "YT Zavod API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const activities = $input.item.json.data || [];\nconst newVideos = activities.filter(v => {\n  const publishedDate = new Date(v.publishedAt);\n  const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);\n  return publishedDate > sixHoursAgo;\n});\n\nreturn newVideos.map(v => ({\n  json: {\n    videoId: v.videoId,\n    title: v.title,\n    channelTitle: v.channelTitle,\n    channelId: v.channelId,\n    publishedAt: v.publishedAt,\n    views: v.views || 0,\n    url: `https://youtube.com/watch?v=${v.videoId}`\n  }\n}));"
+      },
+      "id": "filter-new-videos",
+      "name": "Filter New Videos (6h)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$input.all().length}}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "if-has-new-videos",
+      "name": "Has New Videos?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BACKEND_URL}}/api/videos/download",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "requestMethod": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  \"videoId\": $json.videoId,\n  \"title\": $json.title,\n  \"channel\": $json.channelTitle,\n  \"quality\": \"720p\"\n} }}",
+        "options": {}
+      },
+      "id": "download-video",
+      "name": "Download Video",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1050, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "1",
+          "name": "YT Zavod API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const newVideos = $input.all();\nconst summary = newVideos.map((v, i) => \n  `${i + 1}. *${v.json.title}*\\n   📺 ${v.json.channelTitle}\\n   🔗 ${v.json.url}\\n   👁️ ${v.json.views} просмотров`\n).join('\\n\\n');\n\nreturn {\n  json: {\n    count: newVideos.length,\n    summary: `🆕 *Найдено новых видео: ${newVideos.length}*\\n\\n${summary}`\n  }\n};"
+      },
+      "id": "create-summary",
+      "name": "Create Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1250, 200]
+    },
+    {
+      "parameters": {
+        "chatId": "={{$env.TELEGRAM_ADMIN_CHAT_ID}}",
+        "text": "={{$json.summary}}",
+        "additionalFields": {
+          "parse_mode": "Markdown",
+          "disable_web_page_preview": true
+        }
+      },
+      "id": "notify-new-videos",
+      "name": "Notify New Videos",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [1450, 200],
+      "credentials": {
+        "telegramApi": {
+          "id": "2",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{$env.TELEGRAM_ADMIN_CHAT_ID}}",
+        "text": "ℹ️ *Проверка каналов завершена*\n\nНовых видео не найдено.",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "notify-no-videos",
+      "name": "Notify No Videos",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [1050, 400],
+      "credentials": {
+        "telegramApi": {
+          "id": "2",
+          "name": "Telegram Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Every 6 Hours": {
+      "main": [
+        [
+          {
+            "node": "Get Channel Activities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Channel Activities": {
+      "main": [
+        [
+          {
+            "node": "Filter New Videos (6h)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter New Videos (6h)": {
+      "main": [
+        [
+          {
+            "node": "Has New Videos?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has New Videos?": {
+      "main": [
+        [
+          {
+            "node": "Download Video",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify No Videos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Video": {
+      "main": [
+        [
+          {
+            "node": "Create Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Summary": {
+      "main": [
+        [
+          {
+            "node": "Notify New Videos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "instanceId": "your-instance-id"
+  },
+  "tags": []
+}
