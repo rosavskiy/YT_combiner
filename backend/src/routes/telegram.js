@@ -56,8 +56,17 @@ router.post('/webhook', async (req, res) => {
     const text = message.text || '';
     const firstName = message.from.first_name || 'User';
 
+    console.log('📨 [Webhook] Входящее сообщение:', {
+      telegramId,
+      chatId,
+      text,
+      firstName
+    });
+
     // Проверяем, есть ли пользователь в системе
     const user = getUserByTelegramId(telegramId);
+    
+    console.log('👤 [Webhook] Найден пользователь:', user ? `${user.login} (id: ${user.id}, role: ${user.role})` : 'НЕТ');
     
     if (!user) {
       await sendTelegramMessage(chatId, 
@@ -149,13 +158,26 @@ router.post('/webhook', async (req, res) => {
       }
     }
     else if (text.startsWith('/list_channels') || text === '/list') {
-      const channels = ChannelModel.all({ 
-        owner_user_id: user.id, 
-        isAdmin: user.role === 'admin' 
-      });
+      console.log('🔍 [/list_channels] Запрос от user:', user.id, user.login, 'isAdmin:', user.role === 'admin', 'chatId:', chatId);
       
-      const responseText = formatChannelsList(channels);
-      await sendTelegramMessage(chatId, responseText);
+      try {
+        const channels = ChannelModel.all({ 
+          owner_user_id: user.id, 
+          isAdmin: user.role === 'admin' 
+        });
+        
+        console.log('📊 [/list_channels] Получено каналов:', channels ? channels.length : 'null');
+        console.log('📄 [/list_channels] Данные каналов:', JSON.stringify(channels, null, 2));
+        
+        const responseText = formatChannelsList(channels);
+        console.log('✉️ [/list_channels] Форматированный текст:', responseText.substring(0, 200));
+        
+        const result = await sendTelegramMessage(chatId, responseText);
+        console.log('✅ [/list_channels] Результат отправки:', result);
+      } catch (error) {
+        console.error('❌ [/list_channels] Ошибка:', error);
+        await sendTelegramMessage(chatId, '❌ Произошла ошибка при получении списка каналов.');
+      }
     }
     else if (text.startsWith('/remove_channel')) {
       const parts = text.split(/\s+/);
@@ -284,10 +306,16 @@ router.delete('/webhook', authenticateToken, async (req, res) => {
 // Хелпер для отправки сообщений в Telegram
 async function sendTelegramMessage(chatId, text) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
-  if (!token) return;
+  if (!token) {
+    console.error('❌ [sendTelegramMessage] Токен не найден!');
+    return;
+  }
+
+  console.log('📤 [sendTelegramMessage] Отправка сообщения в чат:', chatId);
+  console.log('📝 [sendTelegramMessage] Текст (первые 100 символов):', text.substring(0, 100));
 
   try {
-    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -297,8 +325,19 @@ async function sendTelegramMessage(chatId, text) {
         disable_web_page_preview: true
       })
     });
+
+    const result = await response.json();
+    
+    if (result.ok) {
+      console.log('✅ [sendTelegramMessage] Сообщение доставлено');
+    } else {
+      console.error('❌ [sendTelegramMessage] Telegram API ошибка:', result);
+    }
+    
+    return result;
   } catch (error) {
-    console.error('Ошибка отправки Telegram сообщения:', error);
+    console.error('❌ [sendTelegramMessage] Ошибка отправки:', error);
+    throw error;
   }
 }
 
