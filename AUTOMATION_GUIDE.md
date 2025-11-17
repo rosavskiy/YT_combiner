@@ -48,6 +48,38 @@
 
 ## 🤖 Telegram бот
 
+### ⚡ У вас уже есть бот для авторизации?
+
+**Используйте существующего бота!** 👉 [`TELEGRAM_EXISTING_BOT.md`](./TELEGRAM_EXISTING_BOT.md)
+
+### Быстрый старт с новым ботом
+
+**См. подробную инструкцию:** [`TELEGRAM_QUICK_START.md`](./TELEGRAM_QUICK_START.md)
+
+**Или полное руководство:** [`TELEGRAM_BOT_SETUP.md`](./TELEGRAM_BOT_SETUP.md)
+
+### Краткая настройка
+
+1. **Создайте бота через [@BotFather](https://t.me/BotFather)**
+   ```
+   /newbot
+   Имя: YT Zavod Manager
+   Username: yt_zavod_bot
+   ```
+
+2. **Добавьте токен в `.env`**
+   ```env
+   TELEGRAM_BOT_TOKEN=123456789:ABCdef...
+   TELEGRAM_WEBHOOK_URL=https://your-domain.com/api/telegram/webhook
+   ```
+
+3. **Установите webhook**
+   ```bash
+   curl -X POST http://localhost:3000/api/telegram/set-webhook
+   ```
+
+4. **Готово!** Найдите бота и отправьте `/start`
+
 ### Настройка
 
 #### 1. Установка webhook для бота

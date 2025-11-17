@@ -1,11 +1,15 @@
 import express from 'express';
 import crypto from 'crypto';
+import axios from 'axios';
 import { authenticateToken } from '../middleware/auth.js';
 import ChannelModel from '../models/ChannelSQLite.js';
 import UserSQLite from '../models/UserSQLite.js';
 import { resolveChannel } from '../services/youtubeChannelService.js';
 
 const router = express.Router();
+
+// Telegram Bot API URL
+const TELEGRAM_API = 'https://api.telegram.org/bot' + process.env.TELEGRAM_BOT_TOKEN;
 
 // Хелпер для проверки подписи Telegram webhook
 function verifyTelegramWebhook(body, token) {
@@ -297,5 +301,115 @@ async function sendTelegramMessage(chatId, text) {
     console.error('Ошибка отправки Telegram сообщения:', error);
   }
 }
+
+// POST /api/telegram/set-webhook - установить webhook для бота
+router.post('/set-webhook', async (req, res) => {
+  try {
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    const webhookUrl = process.env.TELEGRAM_WEBHOOK_URL;
+
+    if (!token) {
+      return res.status(500).json({ 
+        success: false, 
+        error: 'TELEGRAM_BOT_TOKEN не установлен в .env' 
+      });
+    }
+
+    if (!webhookUrl) {
+      return res.status(500).json({ 
+        success: false, 
+        error: 'TELEGRAM_WEBHOOK_URL не установлен в .env' 
+      });
+    }
+
+    // Устанавливаем webhook
+    const response = await axios.post(
+      `https://api.telegram.org/bot${token}/setWebhook`,
+      {
+        url: webhookUrl,
+        allowed_updates: ['message']
+      }
+    );
+
+    if (response.data.ok) {
+      res.json({
+        success: true,
+        message: 'Webhook успешно установлен',
+        data: response.data
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        error: 'Ошибка установки webhook',
+        details: response.data
+      });
+    }
+  } catch (error) {
+    console.error('Ошибка установки webhook:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+// GET /api/telegram/webhook-info - получить информацию о webhook
+router.get('/webhook-info', async (req, res) => {
+  try {
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+
+    if (!token) {
+      return res.status(500).json({ 
+        success: false, 
+        error: 'TELEGRAM_BOT_TOKEN не установлен в .env' 
+      });
+    }
+
+    const response = await axios.get(
+      `https://api.telegram.org/bot${token}/getWebhookInfo`
+    );
+
+    res.json({
+      success: true,
+      data: response.data.result
+    });
+  } catch (error) {
+    console.error('Ошибка получения информации о webhook:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+// DELETE /api/telegram/webhook - удалить webhook
+router.delete('/webhook', async (req, res) => {
+  try {
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+
+    if (!token) {
+      return res.status(500).json({ 
+        success: false, 
+        error: 'TELEGRAM_BOT_TOKEN не установлен в .env' 
+      });
+    }
+
+    const response = await axios.post(
+      `https://api.telegram.org/bot${token}/deleteWebhook`
+    );
+
+    res.json({
+      success: true,
+      message: 'Webhook удален',
+      data: response.data
+    });
+  } catch (error) {
+    console.error('Ошибка удаления webhook:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
 
 export default router;
