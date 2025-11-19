@@ -41,10 +41,11 @@ function formatChannelsList(channels) {
     channels.forEach((ch, idx) => {
     const safeTitle = escapeMarkdownV2(ch.title || 'Без названия');
     const safeUrl = escapeMarkdownV2(ch.url || '');
-    if (safeUrl) {
-      text += `${idx + 1}. [${safeTitle}](${safeUrl})\n`;
-    } else {
-      text += `${idx + 1}. ${safeTitle}\n`;
+      const indexPrefix = `${idx + 1}\\.`;
+      if (safeUrl) {
+        text += `${indexPrefix} [${safeTitle}](${safeUrl})\n`;
+      } else {
+        text += `${indexPrefix} ${safeTitle}\n`;
     }
   });
   return text;
