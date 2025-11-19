@@ -38,7 +38,7 @@ router.post('/download', authenticateToken, requireApproved, async (req, res) =>
     // Добавить в очередь
   // Динамический импорт сервиса, чтобы не падать без Redis
   const { default: videoDownloadService } = await import('../services/videoDownloadService.js');
-  const job = await videoDownloadService.addDownloadJob(videoId, quality);
+  const job = await videoDownloadService.addDownloadJob(videoId, quality, req.user.id);
 
     // Создать/обновить запись в БД
     VideoSQLite.upsert({
@@ -87,6 +87,7 @@ router.post('/parse', authenticateToken, requireApproved, async (req, res) => {
     const job = await videoDownloadService.addParseJob(videoId, {
       languages: languages || ['en', 'ru'],
       spreadsheetId,
+      userId: req.user.id,
     });
 
     try { if (req.user?.id) UserMetricsSQLite.inc(req.user.id, 'videos_parsed', 1); } catch {}

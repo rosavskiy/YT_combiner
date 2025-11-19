@@ -816,6 +816,103 @@ class VideoParser:
             print(f"[ERR] OpenAI Whisper error: {e}")
             return None
     
+    def _sanitize_sheet_name(self, sheet_name):
+        name = (sheet_name or 'Videos').strip()
+        if not name:
+            name = 'Videos'
+        invalid_chars = set(':\\/?*[]')
+        cleaned_chars = []
+        for ch in name:
+            if ch in invalid_chars or ord(ch) < 32:
+                cleaned_chars.append(' ')
+            else:
+                cleaned_chars.append(ch)
+        cleaned = ''.join(cleaned_chars)
+        cleaned = ' '.join(cleaned.split())
+        if not cleaned:
+            cleaned = 'Videos'
+        return cleaned[:100]
+
+    def ensure_sheet_exists(self, spreadsheet_id, sheet_name):
+        if not self.sheets_service:
+            return False, False
+
+        try:
+            meta = self.sheets_service.spreadsheets().get(
+                spreadsheetId=spreadsheet_id,
+                fields='sheets(properties(title))'
+            ).execute()
+            for sheet in meta.get('sheets', []) or []:
+                title = sheet.get('properties', {}).get('title')
+                if title == sheet_name:
+                    return True, False
+        except HttpError as e:
+            print(f"[ERR] Не удалось получить список листов: {e}")
+            return False, False
+        except Exception as e:
+            print(f"[ERR] Не удалось получить список листов: {e}")
+            return False, False
+
+        try:
+            request_body = {
+                'requests': [
+                    {
+                        'addSheet': {
+                            'properties': {
+                                'title': sheet_name
+                            }
+                        }
+                    }
+                ]
+            }
+            self.sheets_service.spreadsheets().batchUpdate(
+                spreadsheetId=spreadsheet_id,
+                body=request_body
+            ).execute()
+            print(f"[OK] Создан новый лист: {sheet_name}")
+            return True, True
+        except HttpError as e:
+            if e.resp.status == 400 and 'already exists' in str(e):
+                return True, False
+            print(f"[ERR] Ошибка создания листа {sheet_name}: {e}")
+            return False, False
+        except Exception as e:
+            print(f"[ERR] Ошибка создания листа {sheet_name}: {e}")
+            return False, False
+
+    def _default_sheet_headers(self):
+        return [[
+            'Video ID',
+            'URL',
+            'Название',
+            'Канал',
+            'Дата публикации',
+            'Длительность (ЧЧ:ММ:СС)',
+            'Таймкоды (список)',
+            'Субтитры',
+            'Язык субтитров',
+            'Теги/Категории',
+            'Статус',
+        ]]
+
+    def _write_sheet_headers(self, spreadsheet_id, sheet_name):
+        if not self.sheets_service:
+            return False
+        headers = self._default_sheet_headers()
+        body = {'values': headers}
+        try:
+            result = self.sheets_service.spreadsheets().values().update(
+                spreadsheetId=spreadsheet_id,
+                range=f'{sheet_name}!A1:K1',
+                valueInputOption='RAW',
+                body=body
+            ).execute()
+            print(f"[OK] Заголовки обновлены ({result.get('updatedCells')} ячеек)")
+            return True
+        except Exception as e:
+            print(f"[ERR] Ошибка обновления заголовков: {e}")
+            return False
+
     def save_to_google_sheets(self, spreadsheet_id, data, sheet_name='Videos'):
         """
         Сохранить данные парсинга в Google Sheets
@@ -833,6 +930,14 @@ class VideoParser:
             return False
         
         try:
+            sheet_name = self._sanitize_sheet_name(sheet_name)
+            ok, created = self.ensure_sheet_exists(spreadsheet_id, sheet_name)
+            if not ok:
+                return False
+            if created and not self._write_sheet_headers(spreadsheet_id, sheet_name):
+                print(f"[ERR] Не удалось подготовить заголовки для листа {sheet_name}")
+                return False
+
             info = data['info']
             chapters = data['chapters']
             transcript = data.get('transcript')
@@ -908,31 +1013,15 @@ class VideoParser:
             return False
         
         try:
-            headers = [[
-                'Video ID',
-                'URL',
-                'Название',
-                'Канал',
-                'Дата публикации',
-                'Длительность (ЧЧ:ММ:СС)',
-                'Таймкоды (список)',
-                'Субтитры',
-                'Язык субтитров',
-                'Теги/Категории',
-                'Статус',
-            ]]
-            
-            body = {'values': headers}
-            
-            result = self.sheets_service.spreadsheets().values().update(
-                spreadsheetId=spreadsheet_id,
-                range=f'{sheet_name}!A1:K1',
-                valueInputOption='RAW',
-                body=body
-            ).execute()
-            
-            print(f"[OK] Шаблон создан: {result.get('updatedCells')} ячеек")
-            return True
+            sheet_name = self._sanitize_sheet_name(sheet_name)
+            ok, _ = self.ensure_sheet_exists(spreadsheet_id, sheet_name)
+            if not ok:
+                return False
+
+            if self._write_sheet_headers(spreadsheet_id, sheet_name):
+                print(f"[OK] Шаблон обновлён для листа: {sheet_name}")
+                return True
+            return False
             
         except Exception as e:
             print(f"[ERR] Ошибка создания шаблона: {e}")
@@ -987,7 +1076,7 @@ def main():
         # Сохранить в Google Sheets если указан spreadsheet
         if args.spreadsheet and parser_instance.sheets_service:
             print("STEP: sheets")
-            if parser_instance.save_to_google_sheets(args.spreadsheet, data):
+            if parser_instance.save_to_google_sheets(args.spreadsheet, data, sheet_name=args.sheet_name):
                 print("PROGRESS: 95")
     else:
         print("[ERR] Не удалось распарсить видео")

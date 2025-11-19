@@ -9,6 +9,7 @@ import { spawn } from 'child_process';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import VideoSQLite from '../models/VideoSQLite.js';
+import UserSQLite from '../models/UserSQLite.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -137,7 +138,7 @@ class VideoDownloadService {
 
     // Обработка парсинга
     this.parseQueue.process(async (job) => {
-  const { videoId, languages, spreadsheetId, translateTo } = job.data;
+  const { videoId, languages, spreadsheetId, translateTo, sheetName } = job.data;
 
       try {
         await job.progress(10);
@@ -152,6 +153,9 @@ class VideoDownloadService {
         }
         if (translateTo) {
           args.push('--translate-to', translateTo);
+        }
+        if (sheetName) {
+          args.push('--sheet-name', sheetName);
         }
 
         const credentialsPath = path.join(this.workersDir, 'google-credentials.json');
@@ -208,7 +212,8 @@ class VideoDownloadService {
           try {
             await this.addParseJob(job.data.videoId, {
               languages: ['en', 'ru'],
-              autoTriggered: true
+              autoTriggered: true,
+              userId: job.data.userId || null,
             });
           } catch (parseError) {
             console.warn(`⚠️ Не удалось запустить автопарсинг: ${parseError.message}`);
@@ -276,6 +281,45 @@ class VideoDownloadService {
     this.parseQueue.on('stalled', (job) => {
       console.log(`⚠️ Parsing job stalled, will retry: ${job.id}`);
     });
+  }
+
+  _generateSheetNameForUser(user) {
+    if (!user) {
+      return null;
+    }
+
+    const pieces = [];
+    if (user.first_name) pieces.push(String(user.first_name));
+    if (user.last_name) pieces.push(String(user.last_name));
+    let base = pieces.join(' ').trim();
+    if (!base && user.username) base = String(user.username);
+    if (!base && user.login) base = String(user.login);
+    if (!base && user.telegram_id) base = `tg-${user.telegram_id}`;
+
+    let title = base ? this._sanitizeSheetTitle(base) : '';
+    const suffixSource = user.id || user.telegram_id || null;
+    if (suffixSource) {
+      const suffix = this._sanitizeSheetTitle(`_${suffixSource}`);
+      title = title ? `${title}${suffix}` : `User${suffix}`;
+    }
+
+    title = this._sanitizeSheetTitle(title || 'User');
+    if (!title) {
+      title = this._sanitizeSheetTitle(`User_${Date.now()}`);
+    }
+
+    return title || 'User';
+  }
+
+  _sanitizeSheetTitle(value) {
+    if (!value) {
+      return '';
+    }
+    return String(value)
+      .replace(/[:\\/?*\[\]]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 100);
   }
 
   /**
@@ -411,6 +455,26 @@ class VideoDownloadService {
   async addParseJob(videoId, options = {}) {
     const { languages = ['en', 'ru', 'uk', 'de', 'fr', 'es'], spreadsheetId = null, userId = null, translateTo = 'ru' } = options;
 
+    let resolvedUserId = userId;
+    if (!resolvedUserId) {
+      try {
+        const videoRecord = VideoSQLite.findByVideoId(videoId);
+        if (videoRecord?.owner_user_id) {
+          resolvedUserId = videoRecord.owner_user_id;
+        }
+      } catch {}
+    }
+
+    let sheetName = null;
+    if (spreadsheetId && resolvedUserId) {
+      try {
+        const user = UserSQLite.findById(resolvedUserId);
+        sheetName = this._generateSheetNameForUser(user);
+      } catch (err) {
+        console.warn('⚠️ Не удалось получить данные пользователя для названия листа:', err?.message);
+      }
+    }
+
     if (this.inlineMode) {
       // В inline-режиме парсинг тоже запускаем сразу
       const inlineJobId = `direct-parse-${Date.now()}`;
@@ -419,6 +483,7 @@ class VideoDownloadService {
         if (spreadsheetId) args.push('--spreadsheet', spreadsheetId);
         if (languages) args.push('--languages', ...languages);
         if (translateTo) args.push('--translate-to', translateTo);
+        if (sheetName) args.push('--sheet-name', sheetName);
         const credentialsPath = path.join(this.workersDir, 'google-credentials.json');
         try { if (await this._fileExists(credentialsPath)) args.push('--credentials', credentialsPath); } catch {}
         const result = await this._runPythonScript('video_parser.py', args);
@@ -436,7 +501,8 @@ class VideoDownloadService {
           languages,
           spreadsheetId,
           translateTo,
-          userId,
+          userId: resolvedUserId,
+          sheetName,
           createdAt: new Date(),
         },
         {
