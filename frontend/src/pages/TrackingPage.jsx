@@ -80,7 +80,12 @@ const TrackingPage = () => {
     queryFn: async () => {
       const res = await channelsService.list();
       return res.data || [];
-    }
+    },
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchInterval: false
   });
 
   const { data: activities, isLoading: isActivitiesLoading, refetch } = useQuery({
@@ -88,7 +93,12 @@ const TrackingPage = () => {
     queryFn: async () => {
       const res = await channelsService.activities(10);
       return res.data || [];
-    }
+    },
+    staleTime: 2 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchInterval: false
   });
 
   const addMutation = useMutation({
