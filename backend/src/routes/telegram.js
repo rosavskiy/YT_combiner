@@ -28,17 +28,17 @@ function getUserByTelegramId(telegramId) {
 // Экранирование текста для MarkdownV2
 function escapeMarkdownV2(text) {
   if (!text) return '';
-  return String(text).replace(/[\\_\*\[\]\(\)~`>#+\-=|{}\.]/g, '\\$&');
+  return String(text).replace(/[\\_\*\[\]\(\)~`>#+\-=|{}\.\!]/g, '\\$&');
 }
 
 // Форматирование ответа для Telegram
 function formatChannelsList(channels) {
   if (!channels.length) {
-    return '📋 *Список каналов пуст*\n\nИспользуйте /add_channel <ссылка> для добавления';
+    return '📋 *Список каналов пуст*\n\nИспользуйте \/add\\_channel <ссылка> для добавления';
   }
   
-  let text = `📋 *Отслеживаемые каналы* (${channels.length}):\n\n`;
-  channels.forEach((ch, idx) => {
+  let text = `📋 *Отслеживаемые каналы* \\(${channels.length}\\):\n\n`;
+    channels.forEach((ch, idx) => {
     const safeTitle = escapeMarkdownV2(ch.title || 'Без названия');
     const safeUrl = escapeMarkdownV2(ch.url || '');
     if (safeUrl) {
@@ -81,14 +81,14 @@ async function handleAddChannel(user, chatId, url) {
 
   if (!apiKey) {
     await sendTelegramMessage(chatId, 
-      `❌ *Ошибка настроек*\n\nYouTube API ключ не настроен в вашем профиле. ` +
-      `Зайдите в раздел *Настройки → Ключи* и укажите ключ.`
+      `❌ *Ошибка настроек*\n\nYouTube API ключ не настроен в вашем профиле\.\n` +
+      `Зайдите в раздел *Настройки → Ключи* и укажите ключ\.`
     );
     return;
   }
 
   try {
-    await sendTelegramMessage(chatId, `⏳ Проверяю канал...`);
+    await sendTelegramMessage(chatId, '⏳ Проверяю канал...', { markdown: false });
 
     const info = await resolveChannel(url, apiKey);
 
@@ -109,15 +109,19 @@ async function handleAddChannel(user, chatId, url) {
       ? '✅ *Канал добавлен*'
       : '♻️ *Канал уже был в списке*';
 
+    const safeTitle = escapeMarkdownV2(info.title);
+    const safeUrl = escapeMarkdownV2(url);
+
     await sendTelegramMessage(chatId, 
       `${statusLine}\n\n` +
-      `📺 *${info.title}*\n` +
+      `📺 *${safeTitle}*\n` +
       `ID: \`${info.channelId}\`\n` +
-      `URL: ${url}`
+      `URL: ${safeUrl}`
     );
   } catch (error) {
+    const safeError = escapeMarkdownV2(error.message || 'Не удалось добавить канал');
     await sendTelegramMessage(chatId, 
-      `❌ *Ошибка добавления*\n\n${error.message || 'Не удалось добавить канал'}`
+      `❌ *Ошибка добавления*\n\n${safeError}`
     );
   }
 }
@@ -151,17 +155,18 @@ router.post('/webhook', async (req, res) => {
     console.log('👤 [Webhook] Найден пользователь:', user ? `${user.login} (id: ${user.id}, role: ${user.role})` : 'НЕТ');
     
     if (!user) {
+      const frontendUrl = escapeMarkdownV2(process.env.FRONTEND_URL || 'http://localhost:5173');
       await sendTelegramMessage(chatId, 
-        `❌ *Доступ запрещен*\n\nВаш Telegram аккаунт не зарегистрирован в системе.\n` +
-        `Пожалуйста, войдите через веб-интерфейс: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`
+        `❌ *Доступ запрещен*\n\nВаш Telegram аккаунт не зарегистрирован в системе\n` +
+        `Пожалуйста, войдите через веб-интерфейс: ${frontendUrl}`
       );
       return res.json({ ok: true });
     }
 
     if (!user.is_approved) {
       await sendTelegramMessage(chatId, 
-        `⏳ *Ожидание подтверждения*\n\nВаш аккаунт ожидает подтверждения администратором.\n` +
-        `После одобрения вы сможете использовать бота.`
+        `⏳ *Ожидание подтверждения*\n\nВаш аккаунт ожидает подтверждения администратором\n` +
+        `После одобрения вы сможете использовать бота`
       );
       return res.json({ ok: true });
     }
@@ -169,7 +174,7 @@ router.post('/webhook', async (req, res) => {
     // Обработка команд
     if (text.startsWith('/start')) {
       const welcomeText = 
-        `👋 Привет, *${firstName}*!\n\n` +
+        `👋 Привет, *${escapeMarkdownV2(firstName)}*\!\n\n` +
         `🤖 *YT Zavod Bot* - управление каналами\n\n` +
         `*Доступные команды:*\n` +
         `/add\\_channel <URL> - добавить канал\n` +
@@ -180,15 +185,20 @@ router.post('/webhook', async (req, res) => {
       await sendTelegramMessage(chatId, welcomeText);
     }
     else if (text.startsWith('/help')) {
+      const addChannelUrlExample = escapeMarkdownV2('/add_channel https://youtube.com/@channel');
+      const addChannelIdExample = escapeMarkdownV2('/add_channel UCxxxxxx');
+      const listChannelsExample = escapeMarkdownV2('/list_channels');
+      const removeChannelExample = escapeMarkdownV2('/remove_channel UCxxxxxx');
+
       const helpText = 
         `📖 *Помощь по командам*\n\n` +
         `*Добавление канала:*\n` +
-        `/add\\_channel https://youtube.com/@channel\n` +
-        `/add\\_channel UCxxxxxx\n\n` +
+        `${addChannelUrlExample}\n` +
+        `${addChannelIdExample}\n\n` +
         `*Просмотр каналов:*\n` +
-        `/list\\_channels\n\n` +
+        `${listChannelsExample}\n\n` +
         `*Удаление канала:*\n` +
-        `/remove\\_channel UCxxxxxx\n\n` +
+        `${removeChannelExample}\n\n` +
         `_Все каналы привязаны к вашему аккаунту_`;
       
       await sendTelegramMessage(chatId, helpText);
@@ -196,9 +206,10 @@ router.post('/webhook', async (req, res) => {
     else if (text.startsWith('/add_channel')) {
       const parts = text.split(/\s+/);
       if (parts.length < 2) {
+        const addChannelInstruction = escapeMarkdownV2('/add_channel https://youtube.com/@channel');
         await sendTelegramMessage(chatId, 
           `❌ *Ошибка*\n\nУкажите ссылку на канал:\n` +
-          `/add\\_channel https://youtube.com/@channel`
+          `${addChannelInstruction}`
         );
         return res.json({ ok: true });
       }
@@ -225,7 +236,7 @@ router.post('/webhook', async (req, res) => {
         console.log('✅ [/list_channels] Результат отправки:', result);
       } catch (error) {
         console.error('❌ [/list_channels] Ошибка:', error);
-        await sendTelegramMessage(chatId, '❌ Произошла ошибка при получении списка каналов.');
+        await sendTelegramMessage(chatId, '❌ Произошла ошибка при получении списка каналов\\.');
       }
     }
     else if (text.startsWith('/remove_channel')) {
@@ -250,8 +261,9 @@ router.post('/webhook', async (req, res) => {
           `✅ *Канал удален*\n\nID: \`${channelId}\``
         );
       } catch (error) {
+        const safeError = escapeMarkdownV2(error.message || 'Канал не найден');
         await sendTelegramMessage(chatId, 
-          `❌ *Ошибка удаления*\n\n${error.message || 'Канал не найден'}`
+          `❌ *Ошибка удаления*\n\n${safeError}`
         );
       }
     }
