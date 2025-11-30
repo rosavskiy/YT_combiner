@@ -6,9 +6,15 @@ import { trendsService, configService } from '../services';
 import { useSocketStore } from '../stores/socketStore';
 import videosService from '../services/videosService';
 import Flag from '../components/Flag';
+import useAuthStore from '../stores/authStore';
 
 const TrendsPage = () => {
   const { message } = AntdApp.useApp();
+  const user = useAuthStore((s) => s.user);
+  const nsKey = (base) => `yt_user_${user?.id || 'anon'}_${base}`;
+  const readLS = (base, def = '') => {
+    try { return localStorage.getItem(nsKey(base)) || def; } catch { return def; }
+  };
   const [progress, setProgress] = useState(0);
   const [selectedCountries, setSelectedCountries] = useState([]);
   const [localTrends, setLocalTrends] = useState(null);
@@ -109,12 +115,11 @@ const TrendsPage = () => {
   });
 
   const handleFetchTrends = () => {
-    let apiKey = localStorage.getItem('youtube_api_key');
+    let apiKey = readLS('youtube_api_key');
     
     // Если ключа нет, используем дефолтный из .env
     if (!apiKey) {
       apiKey = 'AIzaSyCjrigw7ABxzF5SUODpovEHVCtjBWyD_nw';
-      localStorage.setItem('youtube_api_key', apiKey);
       message.info('💡 Используется API ключ из конфигурации');
     }
     
@@ -125,7 +130,7 @@ const TrendsPage = () => {
   // Мутация для парсинга видео из трендов
   const parseMutation = useMutation({
     mutationFn: async (videoId) => {
-      const spreadsheetId = localStorage.getItem('sheets_spreadsheet_id') || undefined;
+      const spreadsheetId = readLS('sheets_spreadsheet_id') || undefined;
       return videosService.parseVideo(videoId, { spreadsheetId });
     },
     onSuccess: () => {

@@ -220,6 +220,7 @@ router.post('/ai/generate', authenticateToken, requireApproved, async (req, res)
       spreadsheetId: req.body?.spreadsheetId || null,
       sheet: req.body?.sheet || null,
       rowIndex: req.body?.rowIndex || null,
+      ownerUserId: req.user.id,
     };
     if (!prompt || prompt.length < 5) {
       return res.status(400).json({ success: false, error: 'prompt обязателен' });

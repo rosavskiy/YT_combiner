@@ -11,6 +11,7 @@ import StatusTag from '@/components/StatusTag';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import videosService from '../services/videosService';
 import { useLocation } from 'react-router-dom';
+import useAuthStore from '../stores/authStore';
 
 const { Search } = Input;
 const { Option } = Select;
@@ -19,6 +20,11 @@ const DownloadPage = () => {
   const { message } = AntdApp.useApp();
   const location = useLocation();
   const queryClient = useQueryClient();
+  const user = useAuthStore((s) => s.user);
+  const nsKey = (base) => `yt_user_${user?.id || 'anon'}_${base}`;
+  const readLS = (base, def = '') => {
+    try { return localStorage.getItem(nsKey(base)) || def; } catch { return def; }
+  };
   const [quality, setQuality] = useState('highest');
   const [inputValue, setInputValue] = useState('');
   const [parseInputValue, setParseInputValue] = useState('');
@@ -68,7 +74,7 @@ const DownloadPage = () => {
   // Мутация для парсинга
   const parseMutation = useMutation({
     mutationFn: (videoId) => {
-      const spreadsheetId = localStorage.getItem('sheets_spreadsheet_id') || undefined;
+      const spreadsheetId = readLS('sheets_spreadsheet_id') || undefined;
       return videosService.parseVideo(videoId, { spreadsheetId });
     },
     onSuccess: () => {

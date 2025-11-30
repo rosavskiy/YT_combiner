@@ -43,13 +43,26 @@ router.delete('/:id', authenticateToken, requireApproved, (req, res) => {
   res.json({ success: true });
 });
 
-// GET /api/channels/activities?limit=10 - latest activities across channels
+// GET /api/channels/activities?limit=5&channelIds=xxx,yyy - latest activities across channels
 router.get('/activities', authenticateToken, requireApproved, async (req, res) => {
-  const limit = Math.min(50, parseInt(req.query.limit || '10', 10));
-  const items = ChannelModel.all({ owner_user_id: req.user.id, isAdmin: req.user.role === 'admin' });
+  const limit = Math.min(50, parseInt(req.query.limit || '5', 10));
+  const channelIdsParam = req.query.channelIds; // comma-separated string
+  
+  let items = ChannelModel.all({ owner_user_id: req.user.id, isAdmin: req.user.role === 'admin' });
+  
+  // Если указаны конкретные каналы, фильтруем
+  if (channelIdsParam && channelIdsParam.trim()) {
+    const requestedIds = channelIdsParam.split(',').map(id => id.trim()).filter(Boolean);
+    if (requestedIds.length > 0) {
+      items = items.filter(item => requestedIds.includes(item.channel_id));
+    }
+  }
+  
   if (!items.length) return res.json({ success: true, data: [] });
+  
   const apiKey = getApiKeyForUser(req.user);
   if (!apiKey) return res.status(400).json({ success: false, error: 'Не настроен YouTube API ключ в настройках пользователя' });
+  
   try {
     const list = await fetchLatestActivities(items.map(i => i.channel_id), apiKey, limit);
     res.json({ success: true, data: list });
@@ -58,12 +71,23 @@ router.get('/activities', authenticateToken, requireApproved, async (req, res) =
   }
 });
 
-// POST /api/channels/refresh - alias to activities
+// POST /api/channels/refresh - alias to activities with body params
 router.post('/refresh', authenticateToken, requireApproved, async (req, res) => {
-  const limit = Math.min(50, parseInt(req.body?.limit || '10', 10));
-  const items = ChannelModel.all({ owner_user_id: req.user.id, isAdmin: req.user.role === 'admin' });
+  const limit = Math.min(50, parseInt(req.body?.limit || '5', 10));
+  const channelIds = req.body?.channelIds || []; // array of channel IDs
+  
+  let items = ChannelModel.all({ owner_user_id: req.user.id, isAdmin: req.user.role === 'admin' });
+  
+  // Если указаны конкретные каналы, фильтруем
+  if (Array.isArray(channelIds) && channelIds.length > 0) {
+    items = items.filter(item => channelIds.includes(item.channel_id));
+  }
+  
+  if (!items.length) return res.json({ success: true, data: [] });
+  
   const apiKey = getApiKeyForUser(req.user);
   if (!apiKey) return res.status(400).json({ success: false, error: 'Не настроен YouTube API ключ в настройках пользователя' });
+  
   try {
     const list = await fetchLatestActivities(items.map(i => i.channel_id), apiKey, limit);
     res.json({ success: true, data: list });

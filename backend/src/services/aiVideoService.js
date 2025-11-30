@@ -69,9 +69,11 @@ class AIVideoService {
       throw new Error('Prompt слишком короткий');
     }
 
+    const ownerUserId = meta?.ownerUserId || null;
+
     if (this.inlineMode) {
       const jobId = `ai-${Date.now()}`;
-      AITaskSQLite.create({ jobId, prompt, options, provider: options?.provider || 'stub', status: 'active', spreadsheetId: meta?.spreadsheetId || null, sheet: meta?.sheet || null, rowIndex: meta?.rowIndex ?? null });
+      AITaskSQLite.create({ jobId, prompt, options, provider: options?.provider || 'stub', status: 'active', spreadsheetId: meta?.spreadsheetId || null, sheet: meta?.sheet || null, rowIndex: meta?.rowIndex ?? null, ownerUserId });
       const filePath = await this._generateStubVideo(jobId, prompt, options);
       try { AITaskSQLite.updateStatus(jobId, 'completed', { resultPath: filePath }); } catch {}
       try {
@@ -88,13 +90,13 @@ class AIVideoService {
       return { jobId, status: 'completed', inline: true, result: { filePath } };
     }
 
-    const job = await this.aiQueue.add({ prompt, options }, {
+    const job = await this.aiQueue.add({ prompt, options, ownerUserId }, {
       attempts: 3,
       backoff: { type: 'exponential', delay: 3000 },
       removeOnComplete: false,
       removeOnFail: false,
     });
-    try { AITaskSQLite.create({ jobId: job.id, prompt, options, provider: options?.provider || 'stub', status: 'pending', spreadsheetId: meta?.spreadsheetId || null, sheet: meta?.sheet || null, rowIndex: meta?.rowIndex ?? null }); } catch {}
+    try { AITaskSQLite.create({ jobId: job.id, prompt, options, provider: options?.provider || 'stub', status: 'pending', spreadsheetId: meta?.spreadsheetId || null, sheet: meta?.sheet || null, rowIndex: meta?.rowIndex ?? null, ownerUserId }); } catch {}
     return { jobId: job.id, status: 'pending' };
   }
 

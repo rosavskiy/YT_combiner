@@ -1,9 +1,10 @@
 import React, { useMemo } from 'react';
-import { Card, Space, Input, Button, List, Typography, Table, Tag, App as AntdApp, Popconfirm } from 'antd';
+import { Card, Space, Input, Button, List, Typography, Table, Tag, App as AntdApp, Popconfirm, Checkbox, Alert } from 'antd';
 import { EyeOutlined, PlusOutlined, ReloadOutlined, DeleteOutlined, DownloadOutlined, FileTextOutlined, LikeOutlined, CommentOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import channelsService from '@/services/channelsService';
 import videosService from '@/services/videosService';
+import useAuthStore from '@/stores/authStore';
 
 const { Title, Text, Link } = Typography;
 
@@ -74,6 +75,13 @@ const makeColumns = (actions) => [
 const TrackingPage = () => {
   const { message } = AntdApp.useApp();
   const queryClient = useQueryClient();
+  const user = useAuthStore((s) => s.user);
+  const nsKey = (base) => `yt_user_${user?.id || 'anon'}_${base}`;
+  const readLS = (base, def = '') => {
+    try { return localStorage.getItem(nsKey(base)) || def; } catch { return def; }
+  };
+
+  const [selectedChannels, setSelectedChannels] = React.useState([]);
 
   const { data: channels, isLoading: isChannelsLoading } = useQuery({
     queryKey: ['channels'],
@@ -88,17 +96,18 @@ const TrackingPage = () => {
     refetchInterval: false
   });
 
-  const { data: activities, isLoading: isActivitiesLoading, refetch } = useQuery({
-    queryKey: ['channels-activities'],
+  const { data: activities, isLoading: isActivitiesLoading, refetch, isFetching } = useQuery({
+    queryKey: ['channels-activities', selectedChannels],
     queryFn: async () => {
-      const res = await channelsService.activities(10);
+      const res = await channelsService.activities(5, selectedChannels);
       return res.data || [];
     },
-    staleTime: 2 * 60 * 1000,
+    staleTime: 10 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    refetchInterval: false
+    refetchInterval: false,
+    enabled: false // Не загружать автоматически при монтировании
   });
 
   const addMutation = useMutation({
@@ -139,7 +148,7 @@ const TrackingPage = () => {
 
   const parseMutation = useMutation({
     mutationFn: async (videoId) => {
-      const spreadsheetId = localStorage.getItem('sheets_spreadsheet_id') || undefined;
+      const spreadsheetId = readLS('sheets_spreadsheet_id') || undefined;
       return videosService.parseVideo(videoId, { spreadsheetId });
     },
     onSuccess: () => message.success('✅ Видео добавлено в очередь парсинга'),
@@ -199,29 +208,72 @@ const TrackingPage = () => {
         <List
           loading={isChannelsLoading}
           dataSource={channels || []}
-          renderItem={(item) => (
-            <List.Item
-              actions={[
-                <Popconfirm title="Удалить канал?" okText="Удалить" cancelText="Отмена" onConfirm={() => deleteMutation.mutate(item.channel_id)}>
-                  <Button danger size="small" icon={<DeleteOutlined />} loading={deleteMutation.isPending}>Удалить</Button>
-                </Popconfirm>
-              ]}
-            >
-              <List.Item.Meta
-                title={<Link href={`https://www.youtube.com/channel/${item.channel_id}`} target="_blank">{item.title || item.channel_id}</Link>}
-                description={item.url}
-              />
-            </List.Item>
-          )}
+          renderItem={(item) => {
+            const isSelected = selectedChannels.includes(item.channel_id);
+            return (
+              <List.Item
+                actions={[
+                  <Popconfirm title="Удалить канал?" okText="Удалить" cancelText="Отмена" onConfirm={() => deleteMutation.mutate(item.channel_id)}>
+                    <Button danger size="small" icon={<DeleteOutlined />} loading={deleteMutation.isPending}>Удалить</Button>
+                  </Popconfirm>
+                ]}
+              >
+                <Checkbox
+                  checked={isSelected}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedChannels([...selectedChannels, item.channel_id]);
+                    } else {
+                      setSelectedChannels(selectedChannels.filter(id => id !== item.channel_id));
+                    }
+                  }}
+                  style={{ marginRight: 12 }}
+                />
+                <List.Item.Meta
+                  title={<Link href={`https://www.youtube.com/channel/${item.channel_id}`} target="_blank">{item.title || item.channel_id}</Link>}
+                  description={item.url}
+                />
+              </List.Item>
+            );
+          }}
         />
       </Card>
 
       <Card
-        title="Последние 10 действий"
-        extra={<Button icon={<ReloadOutlined />} onClick={() => refetch()} loading={isActivitiesLoading}>Обновить</Button>}
+        title={`Последние 5 действий${selectedChannels.length > 0 ? ` (выбрано каналов: ${selectedChannels.length})` : ''}`}
+        extra={
+          <Space>
+            {selectedChannels.length > 0 && (
+              <Button 
+                size="small" 
+                onClick={() => setSelectedChannels([])}
+              >
+                Сбросить выбор
+              </Button>
+            )}
+            <Button 
+              icon={<ReloadOutlined />} 
+              onClick={() => refetch()} 
+              loading={isFetching}
+              disabled={selectedChannels.length === 0}
+              type={selectedChannels.length > 0 ? 'primary' : 'default'}
+            >
+              {selectedChannels.length > 0 ? 'Обновить выбранные' : 'Выберите каналы'}
+            </Button>
+          </Space>
+        }
       >
+        {selectedChannels.length === 0 && !activities?.length && (
+          <Alert 
+            message="Выберите каналы для обновления" 
+            description="Отметьте чекбоксы напротив интересующих каналов и нажмите 'Обновить выбранные'"
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+          />
+        )}
         <Table
-          loading={isActivitiesLoading}
+          loading={isFetching}
           columns={makeColumns(actionsCol)}
           dataSource={dataSource}
           rowKey={(r) => r.activityId || r.videoId}

@@ -19,17 +19,37 @@ const secondsToHMS = (s) => {
 const EmployeePage = () => {
   const queryClient = useQueryClient();
   const { user, impersonating, revertImpersonation } = useAuthStore();
+  const [currentSeconds, setCurrentSeconds] = React.useState(0);
 
   const { data: activeResp } = useQuery({ queryKey: ['worktime-active'], queryFn: worktime.active, select: (r) => r.data });
   const { data: summaryResp } = useQuery({ queryKey: ['worktime-summary'], queryFn: () => worktime.summary({}), select: (r) => r.data });
   const { data: metricsResp } = useQuery({ queryKey: ['user-metrics'], queryFn: () => userService.getMyMetrics(), select: (r) => r.data });
 
   const startMutation = useMutation({ mutationFn: worktime.start, onSuccess: () => queryClient.invalidateQueries({ queryKey: ['worktime-active'] }) });
-  const stopMutation = useMutation({ mutationFn: worktime.stop, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['worktime-active','worktime-summary'] }); } });
+  const stopMutation = useMutation({ mutationFn: worktime.stop, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['worktime-active','worktime-summary','user-metrics'] }); } });
 
   const active = activeResp;
   const summary = summaryResp || { sessions: 0, duration_seconds: 0 };
   const metrics = metricsResp || { videos_downloaded: 0, videos_parsed: 0, videos_generated: 0, earnings_cents: 0, worked_seconds: 0 };
+
+  // Live-счетчик времени текущей сессии
+  React.useEffect(() => {
+    if (!active?.started_at) {
+      setCurrentSeconds(0);
+      return;
+    }
+    
+    const updateTimer = () => {
+      const start = new Date(active.started_at).getTime();
+      const now = Date.now();
+      const elapsed = Math.floor((now - start) / 1000);
+      setCurrentSeconds(elapsed);
+    };
+    
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [active?.started_at]);
 
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
@@ -45,6 +65,14 @@ const EmployeePage = () => {
         <Col xs={24} md={8}>
           <Card title="Рабочее время" extra={active ? <Tag color="green">В работе</Tag> : <Tag>Оффлайн</Tag>}>
             <Space direction="vertical" style={{ width: '100%' }}>
+              {active && (
+                <Statistic 
+                  title="Текущая сессия" 
+                  prefix={<FieldTimeOutlined />} 
+                  value={secondsToHMS(currentSeconds)} 
+                  valueStyle={{ color: '#52c41a' }}
+                />
+              )}
               <Statistic title="Всего за все время" prefix={<FieldTimeOutlined />} value={secondsToHMS(metrics.worked_seconds)} />
               <Statistic title="Сессий" value={summary.sessions || 0} />
               {active && <Text type="secondary">Начато: {new Date(active.started_at).toLocaleString()}</Text>}

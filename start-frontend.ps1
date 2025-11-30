@@ -1,33 +1,33 @@
-# Скрипт быстрого запуска Frontend
+# Frontend startup script
 
 Write-Host "==================================="
-Write-Host "🎨 YT Combiner Frontend Startup"
+Write-Host "YT Combiner Frontend Startup"
 Write-Host "==================================="
 Write-Host ""
 
-# Проверка Node.js
-Write-Host "📦 Проверка Node.js..."
+# Check Node.js
+Write-Host "Checking Node.js..."
 $nodeVersion = node --version 2>$null
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "❌ Node.js не установлен!" -ForegroundColor Red
-    Write-Host "Скачайте с https://nodejs.org/" -ForegroundColor Yellow
+    Write-Host "Node.js is not installed!" -ForegroundColor Red
+    Write-Host "Download from https://nodejs.org/" -ForegroundColor Yellow
     exit 1
 }
-Write-Host "✅ Node.js $nodeVersion" -ForegroundColor Green
+Write-Host "Node.js $nodeVersion" -ForegroundColor Green
 
-# Переход в папку frontend
+# Navigate to frontend folder
 Set-Location -Path $PSScriptRoot\frontend
 
-# Проверка наличия node_modules
+# Check node_modules
 if (-not (Test-Path "node_modules")) {
     Write-Host ""
-    Write-Host "📥 Установка зависимостей..."
+    Write-Host "Installing dependencies..."
     npm install
 }
 
 Write-Host ""
-Write-Host "🎯 Запуск Frontend сервера..."
-Write-Host "Приложение будет доступно на http://localhost:5173"
+Write-Host "Starting Frontend server..."
+Write-Host "Application available at http://localhost:5173"
 Write-Host ""
 
 npm run dev

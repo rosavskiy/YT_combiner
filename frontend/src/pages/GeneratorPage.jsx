@@ -3,23 +3,56 @@ import { Card, Typography, Table, Button, Space, Alert, App as AntdApp, Modal, I
 import { VideoCameraOutlined, ReloadOutlined, PlayCircleOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { generatorService } from '@/services';
+import useAuthStore from '@/stores/authStore';
 
 const { Title } = Typography;
 
-const DEFAULT_SHEET = 'Videos';
-
 const GeneratorPage = () => {
   const { message } = AntdApp.useApp();
+  const user = useAuthStore((s) => s.user);
   const [page, setPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(10);
-  const [spreadsheetId, setSpreadsheetId] = React.useState(() => localStorage.getItem('sheets_spreadsheet_id') || '');
+  
+  // Helpers: namespace localStorage by user id
+  const nsKey = (base) => `yt_user_${user?.id || 'anon'}_${base}`;
+  const readLS = (base, def = '') => {
+    try { return localStorage.getItem(nsKey(base)) || def; } catch { return def; }
+  };
+  
+  const [spreadsheetId, setSpreadsheetId] = React.useState(() => readLS('sheets_spreadsheet_id', ''));
 
-  const queryKey = ['sheets-rows', { spreadsheetId, page, pageSize }];
+  // Генерируем имя листа по пользователю (как в backend)
+  const generateSheetName = React.useCallback(() => {
+    if (!user) return 'Videos';
+    
+    const pieces = [];
+    if (user.first_name) pieces.push(String(user.first_name));
+    if (user.last_name) pieces.push(String(user.last_name));
+    let base = pieces.join(' ').trim();
+    if (!base && user.username) base = String(user.username);
+    if (!base && user.login) base = String(user.login);
+    if (!base && user.telegram_id) base = `tg-${user.telegram_id}`;
+    
+    const suffix = user.id || user.telegram_id || '';
+    const title = base ? `${base}_${suffix}` : `User_${suffix}`;
+    
+    return title || 'Videos';
+  }, [user]);
+
+  const sheetName = React.useMemo(() => generateSheetName(), [generateSheetName]);
+
+  // Обновляем spreadsheetId при смене пользователя
+  React.useEffect(() => {
+    const id = readLS('sheets_spreadsheet_id', '');
+    setSpreadsheetId(id);
+  }, [user?.id]);
+
+  const queryKey = ['sheets-rows', { spreadsheetId, sheetName, page, pageSize }];
   const { data, isLoading, refetch, isFetching, error } = useQuery({
     queryKey,
     enabled: !!spreadsheetId,
     queryFn: async () => {
-      const res = await generatorService.getSheetRows({ spreadsheetId, sheet: DEFAULT_SHEET, page, pageSize });
+      const res = await generatorService.getSheetRows({ spreadsheetId, sheet: sheetName, page, pageSize });
       return res;
     }
   });
@@ -83,15 +116,15 @@ const GeneratorPage = () => {
 
   const onStartAIGeneration = async () => {
     try {
-      const spreadsheetId = localStorage.getItem('sheets_spreadsheet_id') || '';
-      const sheetName = data?.sheet || DEFAULT_SHEET;
+      const currentSpreadsheetId = readLS('sheets_spreadsheet_id', '');
+      const currentSheetName = data?.sheet || sheetName;
       const selectedIdx = selectedRowKeys?.[0] ?? 0; // индекс в пределах текущей страницы
       const absoluteRowIndex = 2 + (page - 1) * pageSize + selectedIdx; // 1-based в таблице (учитываем заголовок)
       const res = await generatorService.aiGenerate({
         prompt: promptText,
         options: { provider, duration: 8, aspect: '1280x720' },
-        spreadsheetId,
-        sheet: sheetName,
+        spreadsheetId: currentSpreadsheetId,
+        sheet: currentSheetName,
         rowIndex: absoluteRowIndex,
       });
       setAiJob(res);
