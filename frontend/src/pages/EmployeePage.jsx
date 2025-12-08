@@ -26,7 +26,13 @@ const EmployeePage = () => {
   const { data: metricsResp } = useQuery({ queryKey: ['user-metrics'], queryFn: () => userService.getMyMetrics(), select: (r) => r.data });
 
   const startMutation = useMutation({ mutationFn: worktime.start, onSuccess: () => queryClient.invalidateQueries({ queryKey: ['worktime-active'] }) });
-  const stopMutation = useMutation({ mutationFn: worktime.stop, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['worktime-active','worktime-summary','user-metrics'] }); } });
+  const stopMutation = useMutation({ 
+    mutationFn: worktime.stop, 
+    onSuccess: () => { 
+      setCurrentSeconds(0); // Сбрасываем счетчик
+      queryClient.invalidateQueries({ queryKey: ['worktime-active','worktime-summary','user-metrics'] }); 
+    } 
+  });
 
   const active = activeResp;
   const summary = summaryResp || { sessions: 0, duration_seconds: 0 };
@@ -40,7 +46,9 @@ const EmployeePage = () => {
     }
     
     const updateTimer = () => {
-      const start = new Date(active.started_at).getTime();
+      // SQLite возвращает время в UTC без 'Z', добавляем его для правильной интерпретации
+      const startedAt = active.started_at.endsWith('Z') ? active.started_at : active.started_at + 'Z';
+      const start = new Date(startedAt).getTime();
       const now = Date.now();
       const elapsed = Math.floor((now - start) / 1000);
       setCurrentSeconds(elapsed);
@@ -75,7 +83,7 @@ const EmployeePage = () => {
               )}
               <Statistic title="Всего за все время" prefix={<FieldTimeOutlined />} value={secondsToHMS(metrics.worked_seconds)} />
               <Statistic title="Сессий" value={summary.sessions || 0} />
-              {active && <Text type="secondary">Начато: {new Date(active.started_at).toLocaleString()}</Text>}
+              {active && <Text type="secondary">Начато: {new Date(active.started_at.endsWith('Z') ? active.started_at : active.started_at + 'Z').toLocaleString()}</Text>}
               <Space>
                 {!active ? (
                   <Button type="primary" icon={<PlayCircleOutlined />} onClick={() => startMutation.mutate()} loading={startMutation.isPending}>Начать</Button>
