@@ -891,6 +891,7 @@ class VideoParser:
             'Таймкоды (список)',
             'Субтитры',
             'Язык субтитров',
+            'Полный текст (первые 500 символов)',
             'Теги/Категории',
             'Статус',
         ]]
@@ -903,7 +904,7 @@ class VideoParser:
         try:
             result = self.sheets_service.spreadsheets().values().update(
                 spreadsheetId=spreadsheet_id,
-                range=f'{sheet_name}!A1:K1',
+                range=f'{sheet_name}!A1:L1',
                 valueInputOption='RAW',
                 body=body
             ).execute()
@@ -941,10 +942,16 @@ class VideoParser:
             info = data['info']
             chapters = data['chapters']
             transcript = data.get('transcript')
+            full_text = data.get('full_text', '')
+            
             # Для таблицы: длительность теперь в формате ЧЧ:ММ:СС
             duration_hhmmss = self._format_hhmmss(info.get('duration') or 0)
             has_subs = 'да' if transcript and transcript.get('segments') else 'нет'
             subs_lang = transcript.get('language') if transcript else ''
+            
+            # Ограничим полный текст для таблицы (первые 500 символов)
+            full_text_preview = full_text[:500] + '...' if len(full_text) > 500 else full_text
+            
             url = f"https://www.youtube.com/watch?v={info['video_id']}"
             # теги или категории — в одну ячейку, первые 10
             tags = info.get('tags') or info.get('categories') or []
@@ -962,7 +969,8 @@ class VideoParser:
 
             # Новая схема колонок:
             # A:Video ID, B:URL, C:Название, D:Канал, E:Дата (ДД.ММ.ГГГГ), F:Длительность (ЧЧ:ММ:СС),
-            # G:Таймкоды (список), H:Субтитры (да/нет), I:Язык субтитров, J:Теги/Категории, K:Статус
+            # G:Таймкоды (список), H:Субтитры (да/нет), I:Язык субтитров, 
+            # J:Полный текст (первые 500), K:Теги/Категории, L:Статус
             values = [[
                 info['video_id'],
                 url,
@@ -973,6 +981,7 @@ class VideoParser:
                 chapters_multiline,
                 has_subs,
                 subs_lang,
+                full_text_preview,
                 tags_str,
                 status,
             ]]

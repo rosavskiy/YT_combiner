@@ -46,11 +46,13 @@ echo -e "${YELLOW}🐍 Setting up Python workers (venv)...${NC}"
 cd $PYTHON_DIR
 # Create venv if missing
 if [ ! -d "venv" ]; then
+    echo -e "${YELLOW}Creating Python virtual environment...${NC}"
     python3 -m venv venv
 fi
 # Install deps into venv
 source venv/bin/activate
 pip install --upgrade pip
+echo -e "${YELLOW}Installing Python dependencies (including openai for Whisper)...${NC}"
 pip install -r requirements.txt
 deactivate
 
@@ -75,11 +77,14 @@ cd $PROJECT_DIR
 PM2_CONFIG="$PROJECT_DIR/ecosystem.config.js"
 if pm2 describe yt-combiner-backend > /dev/null 2>&1; then
     # Перезапускаем по именам, чтобы не зависеть от поиска файла конфигурации
-    pm2 restart yt-combiner-backend || { echo -e "${RED}Не удалось перезапустить yt-combiner-backend${NC}"; exit 1; }
-    pm2 restart yt-combiner-python || { echo -e "${RED}Не удалось перезапустить yt-combiner-python${NC}"; exit 1; }
+    echo -e "${YELLOW}Restarting backend...${NC}"
+    pm2 restart yt-combiner-backend --update-env || { echo -e "${RED}Не удалось перезапустить yt-combiner-backend${NC}"; exit 1; }
+    echo -e "${YELLOW}Restarting python workers...${NC}"
+    pm2 restart yt-combiner-python --update-env || { echo -e "${RED}Не удалось перезапустить yt-combiner-python${NC}"; exit 1; }
 else
     # Процессы ещё не существуют — стартуем из абсолютного пути
     if [ -f "$PM2_CONFIG" ]; then
+        echo -e "${YELLOW}Starting PM2 processes from config...${NC}"
         pm2 start "$PM2_CONFIG" || { echo -e "${RED}Не удалось стартовать через $PM2_CONFIG${NC}"; exit 1; }
     else
         echo -e "${RED}Файл конфигурации PM2 не найден: $PM2_CONFIG${NC}"; exit 1;

@@ -10,6 +10,7 @@ import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import VideoSQLite from '../models/VideoSQLite.js';
 import UserSQLite from '../models/UserSQLite.js';
+import UserSettingsSQLite from '../models/UserSettingsSQLite.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -138,7 +139,7 @@ class VideoDownloadService {
 
     // Обработка парсинга
     this.parseQueue.process(async (job) => {
-  const { videoId, languages, spreadsheetId, translateTo, sheetName } = job.data;
+  const { videoId, languages, spreadsheetId, translateTo, sheetName, userId } = job.data;
 
       try {
         await job.progress(10);
@@ -163,7 +164,22 @@ class VideoDownloadService {
           args.push('--credentials', credentialsPath);
         }
 
+        // Получить пользовательский OpenAI ключ из настроек
+        const customEnv = {};
+        if (userId) {
+          try {
+            const userOpenAIKey = UserSettingsSQLite.get(userId, 'openai_api_key', '');
+            if (userOpenAIKey) {
+              customEnv.OPENAI_API_KEY = userOpenAIKey;
+              console.log(`[Parser] Используем пользовательский OpenAI ключ для userId: ${userId}`);
+            }
+          } catch (e) {
+            console.warn(`[Parser] Не удалось получить OpenAI ключ пользователя: ${e.message}`);
+          }
+        }
+
         const result = await this._runPythonScript('video_parser.py', args, {
+          customEnv,
           onStdout: async (text) => {
             // Прогресс: PROGRESS: <number>
             const prog = text.match(/PROGRESS:\s*(\d{1,3})/);
@@ -337,12 +353,12 @@ class VideoDownloadService {
   /**
    * Запустить Python скрипт
    */
-  _runPythonScript(scriptName, args = [], { onStdout, onStderr } = {}) {
+  _runPythonScript(scriptName, args = [], { onStdout, onStderr, customEnv = {} } = {}) {
     return new Promise((resolve, reject) => {
       const scriptPath = path.join(this.workersDir, scriptName);
       const python = spawn(this.pythonPath, [scriptPath, ...args], {
         cwd: this.workersDir, // чтобы все относительные файлы писались в python-workers, а не в backend
-        env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+        env: { ...process.env, ...customEnv, PYTHONIOENCODING: 'utf-8' },
       });
 
       let stdout = '';
@@ -486,7 +502,22 @@ class VideoDownloadService {
         if (sheetName) args.push('--sheet-name', sheetName);
         const credentialsPath = path.join(this.workersDir, 'google-credentials.json');
         try { if (await this._fileExists(credentialsPath)) args.push('--credentials', credentialsPath); } catch {}
-        const result = await this._runPythonScript('video_parser.py', args);
+        
+        // Получить пользовательский OpenAI ключ
+        const customEnv = {};
+        if (resolvedUserId) {
+          try {
+            const userOpenAIKey = UserSettingsSQLite.get(resolvedUserId, 'openai_api_key', '');
+            if (userOpenAIKey) {
+              customEnv.OPENAI_API_KEY = userOpenAIKey;
+              console.log(`[Parser Inline] Используем пользовательский OpenAI ключ для userId: ${resolvedUserId}`);
+            }
+          } catch (e) {
+            console.warn(`[Parser Inline] Не удалось получить OpenAI ключ: ${e.message}`);
+          }
+        }
+        
+        const result = await this._runPythonScript('video_parser.py', args, { customEnv });
         try { VideoSQLite.updateStatus(videoId, 'completed', inlineJobId); } catch {}
         return { jobId: inlineJobId, videoId, status: 'completed', result, inline: true };
       } catch (error) {
