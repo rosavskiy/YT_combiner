@@ -450,24 +450,33 @@ class VideoParser:
         # Очищаем текст от таймкодов вида <00:00:00.240> и XML-тегов <c>
         import re
         
-        texts = []
-        seen_texts = set()  # Дедупликация одинаковых сегментов
+        # Берём только "чистые" сегменты без XML-тегов (они идут как финальные версии блоков)
+        # В VTT-формате YouTube создаёт:
+        # 1) Сегмент с таймкодами: "Привет<00:00:01> мир<00:00:02>"
+        # 2) Чистый сегмент: "Привет мир"
+        # 3) Следующий с таймкодами: "Привет мир как<00:00:03> дела<00:00:04>"
+        # Нужно брать только чистые (без "<"), чтобы избежать перекрытий
         
+        clean_segments = []
         for seg in transcript['segments']:
             text = seg.get('text', '')
             if not text:
                 continue
-                
-            # Удаляем XML-теги с таймкодами: <00:00:00.240>, <c>, </c>
-            clean_text = re.sub(r'<[^>]+>', '', text)
-            clean_text = clean_text.strip()
             
-            # Пропускаем дубликаты (часто есть версии с таймкодами и без)
-            if clean_text and clean_text not in seen_texts:
-                texts.append(clean_text)
-                seen_texts.add(clean_text)
+            # Берём только сегменты БЕЗ XML-тегов (чистые версии)
+            if '<' not in text:
+                clean_segments.append(text.strip())
         
-        return " ".join(texts)
+        # Если чистых сегментов нет (бывает с Whisper API), очищаем от тегов вручную
+        if not clean_segments:
+            for seg in transcript['segments']:
+                text = seg.get('text', '')
+                if text:
+                    clean_text = re.sub(r'<[^>]+>', '', text).strip()
+                    if clean_text:
+                        clean_segments.append(clean_text)
+        
+        return " ".join(clean_segments)
     
     def transcribe_audio_with_whisper(self, video_id, model='base', language=None, use_openai_api=False):
         """
