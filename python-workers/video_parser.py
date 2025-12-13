@@ -436,18 +436,38 @@ class VideoParser:
     
     def get_full_text(self, transcript):
         """
-        Объединить все сегменты транскрипта в единый текст
+        Объединить все сегменты транскрипта в единый текст (без таймкодов)
         
         Args:
             transcript: Транскрипт от get_transcript()
             
         Returns:
-            str: Полный текст
+            str: Полный текст без XML-тегов и таймкодов
         """
         if not transcript or 'segments' not in transcript:
             return ""
         
-        return " ".join([seg['text'] for seg in transcript['segments']])
+        # Очищаем текст от таймкодов вида <00:00:00.240> и XML-тегов <c>
+        import re
+        
+        texts = []
+        seen_texts = set()  # Дедупликация одинаковых сегментов
+        
+        for seg in transcript['segments']:
+            text = seg.get('text', '')
+            if not text:
+                continue
+                
+            # Удаляем XML-теги с таймкодами: <00:00:00.240>, <c>, </c>
+            clean_text = re.sub(r'<[^>]+>', '', text)
+            clean_text = clean_text.strip()
+            
+            # Пропускаем дубликаты (часто есть версии с таймкодами и без)
+            if clean_text and clean_text not in seen_texts:
+                texts.append(clean_text)
+                seen_texts.add(clean_text)
+        
+        return " ".join(texts)
     
     def transcribe_audio_with_whisper(self, video_id, model='base', language=None, use_openai_api=False):
         """
