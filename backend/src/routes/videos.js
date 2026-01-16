@@ -8,6 +8,10 @@ import http from 'http';
 import { URL } from 'url';
 import { authenticateToken, requireApproved } from '../middleware/auth.js';
 import UserMetricsSQLite from '../models/UserMetricsSQLite.js';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const router = express.Router();
 
@@ -454,7 +458,12 @@ router.get('/:videoId/transcript/download', async (req, res) => {
     
     if (!transcript || !transcript.full_text) {
       // Fallback: проверяем JSON файл
-      const parseDataPath = path.join(process.cwd(), 'python-workers', `${videoId}_parsed.json`);
+      // Путь: backend/src/routes -> backend -> root -> python-workers
+      const workersDir = path.resolve(__dirname, '..', '..', '..', 'python-workers');
+      const parseDataPath = path.join(workersDir, `${videoId}_parsed.json`);
+      
+      console.log(`[Transcript Download] Проверка JSON: ${parseDataPath}`);
+      console.log(`[Transcript Download] Файл существует: ${fs.existsSync(parseDataPath)}`);
       
       if (fs.existsSync(parseDataPath)) {
         const parseData = JSON.parse(fs.readFileSync(parseDataPath, 'utf-8'));
@@ -539,7 +548,8 @@ router.get('/:videoId/transcript', authenticateToken, requireApproved, async (re
     }
     
     // Fallback: проверяем, есть ли сохраненный парсинг в JSON
-    const parseDataPath = path.join(process.cwd(), 'python-workers', `${videoId}_parsed.json`);
+    const workersDir = path.resolve(__dirname, '..', '..', '..', 'python-workers');
+    const parseDataPath = path.join(workersDir, `${videoId}_parsed.json`);
     
     if (fs.existsSync(parseDataPath)) {
       const parseData = JSON.parse(fs.readFileSync(parseDataPath, 'utf-8'));
