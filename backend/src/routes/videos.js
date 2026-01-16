@@ -438,6 +438,70 @@ router.post('/sheets/template', async (req, res) => {
 });
 
 /**
+ * GET /api/videos/:videoId/transcript/download
+ * Скачать полный транскрипт в виде текстового файла
+ * Публичный эндпоинт для ссылок из Google Sheets
+ * ВАЖНО: Должен быть ПЕРЕД /:videoId/transcript
+ */
+router.get('/:videoId/transcript/download', async (req, res) => {
+  try {
+    const { videoId } = req.params;
+    
+    console.log(`[Transcript Download] Запрос для videoId: ${videoId}`);
+    
+    // Проверяем наличие транскрипта в БД
+    const transcript = TranscriptSQLite.get(videoId);
+    
+    if (!transcript || !transcript.full_text) {
+      // Fallback: проверяем JSON файл
+      const parseDataPath = path.join(process.cwd(), 'python-workers', `${videoId}_parsed.json`);
+      
+      if (fs.existsSync(parseDataPath)) {
+        const parseData = JSON.parse(fs.readFileSync(parseDataPath, 'utf-8'));
+        const fullText = parseData.full_text || '';
+        
+        if (!fullText) {
+          console.log(`[Transcript Download] Транскрипт пустой для ${videoId}`);
+          return res.status(404).json({
+            success: false,
+            error: 'Транскрипт не найден или пуст'
+          });
+        }
+        
+        console.log(`[Transcript Download] Отправка из JSON для ${videoId}: ${fullText.length} символов`);
+        const fileName = `${videoId}_transcript.txt`;
+        
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+        res.send(fullText);
+        return;
+      }
+      
+      console.log(`[Transcript Download] Транскрипт не найден для ${videoId}`);
+      return res.status(404).json({
+        success: false,
+        error: 'Транскрипт не найден. Сначала запустите парсинг видео.'
+      });
+    }
+    
+    // Скачивание из БД
+    console.log(`[Transcript Download] Отправка из БД для ${videoId}: ${transcript.full_text.length} символов`);
+    const fileName = `${videoId}_transcript.txt`;
+    
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(transcript.full_text);
+    
+  } catch (error) {
+    console.error('❌ Ошибка скачивания транскрипта:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
  * GET /api/videos/:videoId/transcript
  * Получить транскрипт (текст) видео
  */
@@ -511,64 +575,6 @@ router.get('/:videoId/transcript', authenticateToken, requireApproved, async (re
     
   } catch (error) {
     console.error('❌ Ошибка получения транскрипта:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-/**
- * GET /api/videos/:videoId/transcript/download
- * Скачать полный транскрипт в виде текстового файла
- * Публичный эндпоинт для ссылок из Google Sheets
- */
-router.get('/:videoId/transcript/download', async (req, res) => {
-  try {
-    const { videoId } = req.params;
-    
-    // Проверяем наличие транскрипта в БД
-    const transcript = TranscriptSQLite.get(videoId);
-    
-    if (!transcript || !transcript.full_text) {
-      // Fallback: проверяем JSON файл
-      const parseDataPath = path.join(process.cwd(), 'python-workers', `${videoId}_parsed.json`);
-      
-      if (fs.existsSync(parseDataPath)) {
-        const parseData = JSON.parse(fs.readFileSync(parseDataPath, 'utf-8'));
-        const fullText = parseData.full_text || '';
-        
-        if (!fullText) {
-          return res.status(404).json({
-            success: false,
-            error: 'Транскрипт не найден или пуст'
-          });
-        }
-        
-        // Получаем название видео
-        const fileName = `${videoId}_transcript.txt`;
-        
-        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-        res.send(fullText);
-        return;
-      }
-      
-      return res.status(404).json({
-        success: false,
-        error: 'Транскрипт не найден. Сначала запустите парсинг видео.'
-      });
-    }
-    
-    // Скачивание из БД
-    const fileName = `${videoId}_transcript.txt`;
-    
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-    res.send(transcript.full_text);
-    
-  } catch (error) {
-    console.error('❌ Ошибка скачивания транскрипта:', error);
     res.status(500).json({
       success: false,
       error: error.message
