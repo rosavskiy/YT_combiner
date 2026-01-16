@@ -248,6 +248,27 @@ class VideoDownloadService {
     this.parseQueue.on('completed', async (job, result) => {
       console.log(`✅ Parsing completed: ${job.data.videoId}`);
       
+      // Сохранить транскрипт в БД
+      try {
+        const videoId = job.data.videoId;
+        const parseDataPath = path.join(this.workersDir, `${videoId}_parsed.json`);
+        
+        if (await this._fileExists(parseDataPath)) {
+          const parseData = JSON.parse(await fs.readFile(parseDataPath, 'utf-8'));
+          const fullText = parseData.full_text || '';
+          const language = parseData.transcript?.language || 'unknown';
+          const source = parseData.transcript?.source || 'unknown';
+          
+          if (fullText) {
+            const TranscriptSQLite = (await import('../models/TranscriptSQLite.js')).default;
+            TranscriptSQLite.save(videoId, fullText, language, source);
+            console.log(`💾 Транскрипт сохранен в БД: ${videoId} (${fullText.length} символов)`);
+          }
+        }
+      } catch (saveError) {
+        console.warn(`⚠️ Ошибка сохранения транскрипта в БД: ${saveError.message}`);
+      }
+      
       // Отправка webhook на n8n
       const webhookUrl = process.env.N8N_WEBHOOK_URL;
       if (webhookUrl && job.data.videoId) {

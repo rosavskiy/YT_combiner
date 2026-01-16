@@ -923,6 +923,7 @@ class VideoParser:
             'Полный текст (первые 500 символов)',
             'Теги/Категории',
             'Статус',
+            'Ссылка на транскрипт',
         ]]
 
     def _write_sheet_headers(self, spreadsheet_id, sheet_name):
@@ -933,7 +934,7 @@ class VideoParser:
         try:
             result = self.sheets_service.spreadsheets().values().update(
                 spreadsheetId=spreadsheet_id,
-                range=f'{sheet_name}!A1:L1',
+                range=f'{sheet_name}!A1:M1',
                 valueInputOption='RAW',
                 body=body
             ).execute()
@@ -981,6 +982,10 @@ class VideoParser:
             # Ограничим полный текст для таблицы (первые 500 символов)
             full_text_preview = full_text[:500] + '...' if len(full_text) > 500 else full_text
             
+            # Ссылка на скачивание полного транскрипта
+            backend_url = os.environ.get('BACKEND_URL', 'http://localhost:3000')
+            transcript_link = f"{backend_url}/api/videos/{info['video_id']}/transcript/download" if full_text else ''
+            
             url = f"https://www.youtube.com/watch?v={info['video_id']}"
             # теги или категории — в одну ячейку, первые 10
             tags = info.get('tags') or info.get('categories') or []
@@ -999,7 +1004,7 @@ class VideoParser:
             # Новая схема колонок:
             # A:Video ID, B:URL, C:Название, D:Канал, E:Дата (ДД.ММ.ГГГГ), F:Длительность (ЧЧ:ММ:СС),
             # G:Таймкоды (список), H:Субтитры (да/нет), I:Язык субтитров, 
-            # J:Полный текст (первые 500), K:Теги/Категории, L:Статус
+            # J:Полный текст (первые 500), K:Теги/Категории, L:Статус, M:Ссылка на транскрипт
             values = [[
                 info['video_id'],
                 url,
@@ -1013,6 +1018,7 @@ class VideoParser:
                 full_text_preview,
                 tags_str,
                 status,
+                transcript_link,
             ]]
             
             body = {'values': values}

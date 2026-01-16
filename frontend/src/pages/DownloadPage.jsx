@@ -448,6 +448,19 @@ const DownloadPage = () => {
       fixed: 'right',
       render: (_, record) => (
         <Space>
+          {record.status === 'completed' && (
+            <Tooltip title="Скачать полный транскрипт">
+              <Button
+                type="primary"
+                size="small"
+                icon={<DownloadOutlined />}
+                href={`/api/videos/${record.videoId}/transcript/download`}
+                target="_blank"
+              >
+                Транскрипт
+              </Button>
+            </Tooltip>
+          )}
           {record.status === 'failed' && (
             <Button
               type="link"

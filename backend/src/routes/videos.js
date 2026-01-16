@@ -1,5 +1,6 @@
 import express from 'express';
 import VideoSQLite from '../models/VideoSQLite.js';
+import TranscriptSQLite from '../models/TranscriptSQLite.js';
 import fs from 'fs';
 import path from 'path';
 import https from 'https';
@@ -454,7 +455,26 @@ router.get('/:videoId/transcript', authenticateToken, requireApproved, async (re
       });
     }
     
-    // Проверяем, есть ли сохраненный парсинг
+    // Сначала проверяем БД
+    const transcript = TranscriptSQLite.get(videoId);
+    
+    if (transcript) {
+      return res.json({
+        success: true,
+        data: {
+          videoId,
+          title: video.title,
+          fullText: transcript.full_text,
+          language: transcript.language,
+          source: transcript.source,
+          textLength: transcript.text_length,
+          parsed: true,
+          hasTranscript: true
+        }
+      });
+    }
+    
+    // Fallback: проверяем, есть ли сохраненный парсинг в JSON
     const parseDataPath = path.join(process.cwd(), 'python-workers', `${videoId}_parsed.json`);
     
     if (fs.existsSync(parseDataPath)) {
@@ -468,7 +488,8 @@ router.get('/:videoId/transcript', authenticateToken, requireApproved, async (re
           fullText: parseData.full_text || '',
           transcript: parseData.transcript || null,
           chapters: parseData.chapters || [],
-          parsed: true
+          parsed: true,
+          hasTranscript: !!(parseData.full_text)
         }
       });
     }
@@ -483,12 +504,71 @@ router.get('/:videoId/transcript', authenticateToken, requireApproved, async (re
         transcript: null,
         chapters: [],
         parsed: false,
+        hasTranscript: false,
         message: 'Видео не распарсено. Используйте POST /api/videos/parse'
       }
     });
     
   } catch (error) {
     console.error('❌ Ошибка получения транскрипта:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/videos/:videoId/transcript/download
+ * Скачать полный транскрипт в виде текстового файла
+ */
+router.get('/:videoId/transcript/download', authenticateToken, requireApproved, async (req, res) => {
+  try {
+    const { videoId } = req.params;
+    
+    // Проверяем наличие транскрипта в БД
+    const transcript = TranscriptSQLite.get(videoId);
+    
+    if (!transcript || !transcript.full_text) {
+      // Fallback: проверяем JSON файл
+      const parseDataPath = path.join(process.cwd(), 'python-workers', `${videoId}_parsed.json`);
+      
+      if (fs.existsSync(parseDataPath)) {
+        const parseData = JSON.parse(fs.readFileSync(parseDataPath, 'utf-8'));
+        const fullText = parseData.full_text || '';
+        
+        if (!fullText) {
+          return res.status(404).json({
+            success: false,
+            error: 'Транскрипт не найден или пуст'
+          });
+        }
+        
+        // Получаем название видео
+        const video = VideoSQLite.findByVideoId(videoId);
+        const fileName = `${videoId}_transcript.txt`;
+        
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+        res.send(fullText);
+        return;
+      }
+      
+      return res.status(404).json({
+        success: false,
+        error: 'Транскрипт не найден. Сначала запустите парсинг видео.'
+      });
+    }
+    
+    // Скачивание из БД
+    const fileName = `${videoId}_transcript.txt`;
+    
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(transcript.full_text);
+    
+  } catch (error) {
+    console.error('❌ Ошибка скачивания транскрипта:', error);
     res.status(500).json({
       success: false,
       error: error.message

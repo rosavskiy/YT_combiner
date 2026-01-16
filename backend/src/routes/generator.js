@@ -210,7 +210,8 @@ router.get('/sheets', async (req, res) => {
 
 /**
  * POST /api/generator/ai/generate
- * Body: { prompt: string, options?: { duration?: number, aspect?: string, provider?: string } }
+ * Генерация AI видео (stub или rebuild)
+ * Body: { prompt: string, options?: { duration?: number, aspect?: string, provider?: string, videoId?: string } }
  */
 router.post('/ai/generate', authenticateToken, requireApproved, async (req, res) => {
   try {
@@ -222,6 +223,15 @@ router.post('/ai/generate', authenticateToken, requireApproved, async (req, res)
       rowIndex: req.body?.rowIndex || null,
       ownerUserId: req.user.id,
     };
+
+    // Для rebuild provider обязателен videoId
+    if (options.provider === 'rebuild-basic' && !options.videoId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Для rebuild-basic необходим videoId в options'
+      });
+    }
+
     if (!prompt || prompt.length < 5) {
       return res.status(400).json({ success: false, error: 'prompt обязателен' });
     }

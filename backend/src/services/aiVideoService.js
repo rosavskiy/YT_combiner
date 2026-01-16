@@ -5,6 +5,7 @@ import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import AITaskSQLite from '../models/AITaskSQLite.js';
 import googleSheetsService from './googleSheetsService.js';
+import ttsService from './ttsService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,7 +32,16 @@ class AIVideoService {
       this.aiQueue.process(async (job) => {
         const { prompt, options } = job.data;
         try {
-          const filePath = await this._generateStubVideo(job.id, prompt, options);
+          let filePath;
+          const provider = options?.provider || 'stub';
+
+          // Выбор провайдера генерации
+          if (provider === 'rebuild-basic') {
+            filePath = await this._rebuildVideoBasic(job.id, options);
+          } else {
+            filePath = await this._generateStubVideo(job.id, prompt, options);
+          }
+
           try { AITaskSQLite.updateStatus(job.id, 'completed', { resultPath: filePath }); } catch {}
           try {
             const rec = AITaskSQLite.findByJobId(job.id);
@@ -73,8 +83,16 @@ class AIVideoService {
 
     if (this.inlineMode) {
       const jobId = `ai-${Date.now()}`;
-      AITaskSQLite.create({ jobId, prompt, options, provider: options?.provider || 'stub', status: 'active', spreadsheetId: meta?.spreadsheetId || null, sheet: meta?.sheet || null, rowIndex: meta?.rowIndex ?? null, ownerUserId });
-      const filePath = await this._generateStubVideo(jobId, prompt, options);
+      const provider = options?.provider || 'stub';
+      AITaskSQLite.create({ jobId, prompt, options, provider, status: 'active', spreadsheetId: meta?.spreadsheetId || null, sheet: meta?.sheet || null, rowIndex: meta?.rowIndex ?? null, ownerUserId });
+      
+      let filePath;
+      if (provider === 'rebuild-basic') {
+        filePath = await this._rebuildVideoBasic(jobId, options);
+      } else {
+        filePath = await this._generateStubVideo(jobId, prompt, options);
+      }
+
       try { AITaskSQLite.updateStatus(jobId, 'completed', { resultPath: filePath }); } catch {}
       try {
         if (meta?.spreadsheetId && meta?.rowIndex) {
@@ -154,6 +172,120 @@ class AIVideoService {
 
     // Сохраним подсказку рядом
     try { fs.writeFileSync(outFile.replace(/\.mp4$/, '.txt'), `Prompt: ${prompt}`); } catch {}
+    return outFile;
+  }
+
+  /**
+   * Базовый ребилд видео (Фаза 1 MVP)
+   * Озвучка из транскрипта + черный экран
+   */
+  async _rebuildVideoBasic(id, options) {
+    const videoId = options?.videoId;
+    if (!videoId) {
+      throw new Error('videoId обязателен для rebuild');
+    }
+
+    console.log(`[RebuildBasic] Начало ребилда для видео: ${videoId}`);
+    
+    const outFile = path.join(this.outputsDir, `rebuilt_${id}.mp4`);
+    if (fs.existsSync(outFile)) return outFile;
+
+    // 1. Читаем parsed JSON
+    const pythonWorkersDir = path.resolve(__dirname, '..', '..', '..', 'python-workers');
+    const parsedPath = path.join(pythonWorkersDir, `${videoId}_parsed.json`);
+    
+    if (!fs.existsSync(parsedPath)) {
+      throw new Error(`Parsed data не найден: ${videoId}_parsed.json. Сначала запустите парсинг видео.`);
+    }
+
+    const parsedData = JSON.parse(fs.readFileSync(parsedPath, 'utf-8'));
+    const fullText = parsedData.full_text || '';
+    
+    if (!fullText || fullText.trim().length === 0) {
+      throw new Error('Транскрипт пустой. Невозможно создать озвучку.');
+    }
+
+    console.log(`[RebuildBasic] Транскрипт загружен: ${fullText.length} символов`);
+
+    // 2. Генерация озвучки через ElevenLabs
+    console.log('[RebuildBasic] Генерация озвучки...');
+    const voiceResult = await ttsService.textToSpeech(fullText, {
+      voiceId: options?.voiceId,
+      outputPath: path.join(this.outputsDir, `voice_${id}.mp3`)
+    });
+
+    console.log(`[RebuildBasic] Озвучка готова: ${voiceResult.audioPath}, ${voiceResult.duration}сек`);
+
+    // 3. Проверка ffmpeg
+    const ffmpegOk = await new Promise((resolve) => {
+      try {
+        const p = spawn('ffmpeg', ['-version']);
+        p.on('error', () => resolve(false));
+        p.on('close', (code) => resolve(code === 0 || code === null));
+      } catch {
+        resolve(false);
+      }
+    });
+
+    if (!ffmpegOk) {
+      throw new Error('ffmpeg не установлен. Установите ffmpeg для монтажа видео.');
+    }
+
+    // 4. Создание видео: черный экран + озвучка
+    const duration = voiceResult.duration || 60; // Fallback
+    const size = options?.resolution || '1280x720';
+
+    console.log(`[RebuildBasic] Создание видео: ${size}, ${duration}сек`);
+
+    const args = [
+      '-y',
+      '-f', 'lavfi', '-i', `color=c=black:size=${size}:d=${duration}`,
+      '-i', voiceResult.audioPath,
+      '-c:v', 'libx264',
+      '-c:a', 'aac',
+      '-pix_fmt', 'yuv420p',
+      '-shortest',
+      '-movflags', '+faststart',
+      outFile
+    ];
+
+    await new Promise((resolve, reject) => {
+      const ff = spawn('ffmpeg', args);
+      
+      ff.stderr.on('data', (data) => {
+        // ffmpeg выводит прогресс в stderr
+        const line = data.toString();
+        if (line.includes('time=')) {
+          process.stdout.write('.');
+        }
+      });
+
+      ff.on('error', (e) => reject(e));
+      ff.on('close', (code) => {
+        if (code === 0) {
+          console.log('\n[RebuildBasic] Видео готово!');
+          resolve();
+        } else {
+          reject(new Error(`ffmpeg exited ${code}`));
+        }
+      });
+    });
+
+    // 5. Сохраняем метаданные
+    try {
+      const metaPath = outFile.replace(/\.mp4$/, '_meta.json');
+      fs.writeFileSync(metaPath, JSON.stringify({
+        sourceVideoId: videoId,
+        createdAt: new Date().toISOString(),
+        provider: 'rebuild-basic',
+        voiceId: voiceResult.voiceId,
+        duration: voiceResult.duration,
+        textLength: fullText.length,
+        cost: ttsService.estimateCost(fullText)
+      }, null, 2));
+    } catch {}
+
+    console.log(`[RebuildBasic] Ребилд завершён: ${outFile}`);
     return outFile;
   }
 }

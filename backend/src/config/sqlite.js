@@ -200,6 +200,25 @@ function initDatabase() {
     )
   `);
 
+  // Таблица транскриптов видео (полные тексты)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS transcripts (
+      video_id TEXT PRIMARY KEY,
+      full_text TEXT NOT NULL,
+      language TEXT DEFAULT 'unknown',
+      source TEXT DEFAULT 'unknown',
+      text_length INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(video_id) REFERENCES videos(video_id) ON DELETE CASCADE
+    )
+  `);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_transcripts_video_id ON transcripts(video_id);
+    CREATE INDEX IF NOT EXISTS idx_transcripts_language ON transcripts(language);
+    CREATE INDEX IF NOT EXISTS idx_transcripts_source ON transcripts(source);
+  `);
+
   console.log('✅ SQLite база данных инициализирована');
   console.log(`📁 Путь к БД: ${dbPath}`);
 }
