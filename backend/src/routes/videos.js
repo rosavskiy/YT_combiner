@@ -521,8 +521,9 @@ router.get('/:videoId/transcript', authenticateToken, requireApproved, async (re
 /**
  * GET /api/videos/:videoId/transcript/download
  * Скачать полный транскрипт в виде текстового файла
+ * Публичный эндпоинт для ссылок из Google Sheets
  */
-router.get('/:videoId/transcript/download', authenticateToken, requireApproved, async (req, res) => {
+router.get('/:videoId/transcript/download', async (req, res) => {
   try {
     const { videoId } = req.params;
     
@@ -545,7 +546,6 @@ router.get('/:videoId/transcript/download', authenticateToken, requireApproved, 
         }
         
         // Получаем название видео
-        const video = VideoSQLite.findByVideoId(videoId);
         const fileName = `${videoId}_transcript.txt`;
         
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');

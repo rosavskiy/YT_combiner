@@ -174,6 +174,27 @@ const DownloadPage = () => {
     deleteMutation.mutate({ jobId, queueType });
   };
 
+  const handleDownloadTranscript = async (videoId) => {
+    try {
+      const response = await videosService.downloadTranscript(videoId);
+      
+      // Создать blob и скачать файл
+      const blob = new Blob([response], { type: 'text/plain; charset=utf-8' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${videoId}_transcript.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      message.success('✅ Транскрипт скачан!');
+    } catch (error) {
+      message.error(`❌ Ошибка скачивания: ${error.message}`);
+    }
+  };
+
   // Объединить все задачи
   const allJobs = queueData 
     ? [...queueData.active, ...queueData.waiting, ...queueData.completed.slice(0, 10), ...queueData.failed]
@@ -454,8 +475,7 @@ const DownloadPage = () => {
                 type="primary"
                 size="small"
                 icon={<DownloadOutlined />}
-                href={`/api/videos/${record.videoId}/transcript/download`}
-                target="_blank"
+                onClick={() => handleDownloadTranscript(record.videoId)}
               >
                 Транскрипт
               </Button>

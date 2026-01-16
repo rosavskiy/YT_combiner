@@ -114,6 +114,35 @@ const videosService = {
     const response = await api.get('/system/health');
     return response;
   },
+
+  /**
+   * Скачать транскрипт видео как текстовый файл
+   */
+  downloadTranscript: async (videoId) => {
+    // Используем axios напрямую для получения текста
+    const axios = (await import('axios')).default;
+    
+    try {
+      const raw = localStorage.getItem('auth-storage');
+      let token = null;
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        token = parsed?.state?.token || parsed?.token;
+      }
+      
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL || '/api'}/videos/${videoId}/transcript/download`,
+        {
+          responseType: 'text',
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        }
+      );
+      
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.error || error.message || 'Ошибка скачивания транскрипта');
+    }
+  },
 };
 
 export default videosService;
